@@ -1,0 +1,33 @@
+{% extends "gst_app/base.html" %}
+{% load gst_extras %}
+{% block title %}End of Day {{ record.date }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="h3 mb-0">End of Day {{ record.date }}</h1>
+  <div class="action-row">
+    <a class="btn btn-outline-primary" href="{% url 'endofday_edit' record.pk %}">Edit</a>
+    <a class="btn btn-outline-secondary" href="{% url 'endofday_pdf' record.pk %}">Preview PDF</a>
+  </div>
+</div>
+<div class="metric-grid">
+  <section class="metric-card"><span>Total Sales</span><strong>{{ record.total_sales|currency }}</strong></section>
+  <section class="metric-card"><span>Gross Shop Sales</span><strong>{{ record.gross_shop_sales|currency }}</strong></section>
+  <section class="metric-card"><span>Total Value</span><strong>{{ record.total_value|currency }}</strong></section>
+  <section class="metric-card"><span>Difference</span><strong>{{ record.difference|currency }}</strong></section>
+  <section class="metric-card"><span>Net Shop Sales</span><strong>{{ record.net_shop_sales|currency }}</strong></section>
+</div>
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead><tr><th>Line</th><th class="text-end">Amount</th></tr></thead>
+    <tbody>
+      {% for label, amount in record.line_items %}
+        <tr><td>{{ label }}</td><td class="text-end">{{ amount|currency }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<section class="note-block">
+  <strong>Note</strong>
+  <p>{{ record.note|default:"-" }}</p>
+</section>
+{% endblock %}

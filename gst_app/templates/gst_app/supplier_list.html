@@ -1,0 +1,28 @@
+{% extends "gst_app/base.html" %}
+{% block title %}Suppliers{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="h3 mb-0">Suppliers</h1>
+  <a class="btn btn-primary" href="{% url 'supplier_add' %}">+ Add Supplier</a>
+</div>
+<form class="filter-bar">
+  <input class="form-control" name="q" value="{{ query }}" placeholder="Search suppliers">
+  <button class="btn btn-outline-secondary">Search</button>
+</form>
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead><tr><th>Name</th><th>Updated</th><th></th></tr></thead>
+    <tbody>
+      {% for supplier in suppliers %}
+        <tr>
+          <td>{{ supplier.name }}</td>
+          <td>{{ supplier.updated_at }}</td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'supplier_edit' supplier.pk %}">Edit</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3">No suppliers yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

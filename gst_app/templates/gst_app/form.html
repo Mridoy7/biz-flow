@@ -1,0 +1,24 @@
+{% extends "gst_app/base.html" %}
+{% load gst_extras %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="form-panel">
+  <div class="page-header">
+    <h1 class="h4 mb-0">{{ title }}</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ cancel_url }}">Back</a>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="stacked-form">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ cancel_url }}">
+    {% for field in form %}
+      <div>
+        <label class="form-label">{{ field.label }}</label>
+        {{ field|add_class:"form-control" }}
+        <div class="form-text">{{ field.help_text }}</div>
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+</section>
+{% endblock %}

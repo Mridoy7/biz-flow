@@ -1,0 +1,165 @@
+{% extends "gst_app/base.html" %}
+{% load gst_extras %}
+{% block title %}End of Day{% endblock %}
+{% block content %}
+<section class="form-panel wide">
+  <div class="page-header">
+    <h1 class="h4 mb-0">End of Day</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ cancel_url }}">Back</a>
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ cancel_url }}">
+    {{ form.non_field_errors }}
+    <div class="calculation-summary" aria-live="polite">
+      <div>
+        <span>Adjusted United Card</span>
+        <strong id="summary-adjusted-united-card">$0.00</strong>
+      </div>
+      <div>
+        <span>Total Value</span>
+        <strong id="summary-total-value">$0.00</strong>
+      </div>
+      <div id="summary-difference-card">
+        <span>Difference</span>
+        <strong id="summary-difference">$0.00</strong>
+      </div>
+      <div>
+        <span>Gross Shop Sales</span>
+        <strong id="summary-gross-shop-sales">$0.00</strong>
+      </div>
+      <div>
+        <span>Net Shop Sales</span>
+        <strong id="summary-net-shop-sales">$0.00</strong>
+      </div>
+    </div>
+    <p class="calculation-warning d-none" id="difference-warning">
+      Difference is more than $5. A note is required before saving.
+    </p>
+    <div class="form-grid">
+      {% for field in form %}
+        <div class="{% if field.name == 'note' %}span-2{% endif %}">
+          <label class="form-label">{{ field.label }}</label>
+          {{ field|add_class:"form-control" }}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="mt-3 d-flex gap-2">
+      <button class="btn btn-primary" type="submit">Save</button>
+      {% if record %}<a class="btn btn-outline-secondary" href="{% url 'endofday_pdf' record.pk %}">Preview PDF</a>{% endif %}
+    </div>
+  </form>
+</section>
+<script>
+  const moneyFields = [
+    "uber_eats",
+    "doordash",
+    "eftpos",
+    "amex_card",
+    "motorpass",
+    "motorcharge",
+    "fleet_card",
+    "diners_card",
+    "united_card",
+    "store_value_charge",
+    "iou",
+    "drive_offs",
+    "cash",
+    "vault_drop",
+    "total_sales",
+    "gross_shop_sales",
+    "ezy_pin",
+    "less_surcharge"
+  ];
+  const totalSalesInput = document.getElementById("id_total_sales");
+  let totalSalesEntered = Boolean(totalSalesInput && !["", "0", "0.0", "0.00"].includes(totalSalesInput.value.trim()));
+
+  function fieldValue(name) {
+    const input = document.getElementById(`id_${name}`);
+    const value = input ? Number.parseFloat(input.value) : 0;
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function money(value) {
+    return new Intl.NumberFormat("en-AU", {
+      style: "currency",
+      currency: "AUD"
+    }).format(value);
+  }
+
+  function setSummary(id, value) {
+    document.getElementById(id).textContent = money(value);
+  }
+
+  function updateSummary() {
+    const adjustedUnitedCard = fieldValue("united_card") + fieldValue("store_value_charge") - fieldValue("iou") - fieldValue("drive_offs");
+    const totalValue = fieldValue("uber_eats")
+      + fieldValue("doordash")
+      + fieldValue("eftpos")
+      + fieldValue("amex_card")
+      + fieldValue("motorpass")
+      + fieldValue("motorcharge")
+      + fieldValue("fleet_card")
+      + fieldValue("diners_card")
+      + adjustedUnitedCard
+      + fieldValue("iou")
+      + fieldValue("drive_offs")
+      + fieldValue("cash")
+      + fieldValue("vault_drop");
+    const difference = totalValue - fieldValue("total_sales");
+    const grossShopSales = fieldValue("gross_shop_sales");
+    const netShopSales = grossShopSales - fieldValue("ezy_pin") - fieldValue("less_surcharge");
+
+    setSummary("summary-adjusted-united-card", adjustedUnitedCard);
+    setSummary("summary-total-value", totalValue);
+    setSummary("summary-gross-shop-sales", grossShopSales);
+    setSummary("summary-difference", difference);
+    setSummary("summary-net-shop-sales", netShopSales);
+
+    const note = document.getElementById("id_note");
+    const warning = document.getElementById("difference-warning");
+    const differenceCard = document.getElementById("summary-difference-card");
+    differenceCard.classList.toggle("d-none", !totalSalesEntered);
+    warning.classList.toggle("d-none", !totalSalesEntered || Math.abs(difference) <= 5 || (note && note.value.trim()));
+  }
+
+  moneyFields.forEach((name) => {
+    const input = document.getElementById(`id_${name}`);
+    if (input) {
+      input.addEventListener("focus", () => {
+        if (["0", "0.0", "0.00"].includes(input.value.trim())) {
+          input.value = "";
+        } else {
+          input.select();
+        }
+      });
+      input.addEventListener("blur", () => {
+        if (input.value.trim() === "" && !["ezy_pin", "less_surcharge"].includes(name)) {
+          input.value = "0.00";
+          updateSummary();
+        }
+      });
+      input.addEventListener("input", () => {
+        if (name === "total_sales") {
+          totalSalesEntered = true;
+        }
+        updateSummary();
+      });
+      input.addEventListener("change", () => {
+        if (name === "total_sales") {
+          totalSalesEntered = true;
+        }
+        updateSummary();
+      });
+    }
+  });
+
+  const noteInput = document.getElementById("id_note");
+  if (noteInput) {
+    noteInput.addEventListener("input", updateSummary);
+  }
+
+  updateSummary();
+</script>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "gst_app/base.html" %}
+{% load gst_extras %}
+{% block title %}End of Day{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="h3 mb-0">End of Day</h1>
+  <div class="action-row">
+    <a class="btn btn-outline-secondary" href="{% url 'archived_endofday_list' %}">Archived</a>
+    <a class="btn btn-success" href="{% url 'endofday_add' %}?next={{ request.get_full_path|urlencode }}">+ Add End of Day</a>
+  </div>
+</div>
+<form class="filter-bar">
+  {{ form.period|add_class:"form-select" }}
+  {{ form.start_date|add_class:"form-control" }}
+  {{ form.end_date|add_class:"form-control" }}
+  <button class="btn btn-outline-secondary">Filter</button>
+  <a class="btn btn-outline-secondary" href="{% url 'endofday_export' 'pdf' %}?{{ request.GET.urlencode }}">PDF</a>
+  <a class="btn btn-outline-secondary" href="{% url 'endofday_export' 'xlsx' %}?{{ request.GET.urlencode }}">Excel</a>
+  <a class="btn btn-outline-secondary" href="{% url 'endofday_export' 'csv' %}?{{ request.GET.urlencode }}">CSV</a>
+</form>
+{% include "gst_app/partials/endofday_table.html" with records=records %}
+{% endblock %}

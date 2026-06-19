@@ -1,0 +1,43 @@
+{% extends "gst_app/base.html" %}
+{% load gst_extras %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="h3 mb-1">Dashboard</h1>
+    <p class="text-secondary mb-0">Daily invoice capture and reconciliation summary.</p>
+  </div>
+  <div class="action-row">
+    <a class="btn btn-primary" href="{% url 'invoice_add' %}?next={{ request.get_full_path|urlencode }}">+ Add Invoice</a>
+    <a class="btn btn-success" href="{% url 'endofday_add' %}?next={{ request.get_full_path|urlencode }}">+ Add End of Day</a>
+  </div>
+</div>
+
+<div class="metric-grid">
+  <section class="metric-card">
+    <span>Total Invoices</span>
+    <strong>{{ invoice_count }}</strong>
+  </section>
+  <section class="metric-card">
+    <span>Latest End of Day</span>
+    <strong>{% if latest_endofday %}{{ latest_endofday.date }}{% else %}-{% endif %}</strong>
+  </section>
+</div>
+
+<div class="content-grid">
+  <section>
+    <div class="section-title">
+      <h2 class="h5">Recent Invoices</h2>
+      <a href="{% url 'invoice_list' %}">View all</a>
+    </div>
+    {% include "gst_app/partials/invoice_table.html" with invoices=recent_invoices compact=True %}
+  </section>
+  <section>
+    <div class="section-title">
+      <h2 class="h5">End of Day Summary</h2>
+      <a href="{% url 'endofday_list' %}">Reports</a>
+    </div>
+    {% include "gst_app/partials/endofday_table.html" with records=recent_endofday compact=True %}
+  </section>
+</div>
+{% endblock %}

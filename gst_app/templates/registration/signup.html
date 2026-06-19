@@ -1,0 +1,18 @@
+{% extends "gst_app/base.html" %}
+{% load gst_extras %}
+{% block title %}Register{% endblock %}
+{% block content %}
+<section class="narrow-panel">
+  <h1 class="h4 mb-3">Create Account</h1>
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    {% for field in form %}
+      <label class="form-label">{{ field.label }}</label>
+      {{ field|add_class:"form-control" }}
+      <div class="form-text">{{ field.help_text }}</div>
+      {{ field.errors }}
+    {% endfor %}
+    <button class="btn btn-primary" type="submit">Register</button>
+  </form>
+</section>
+{% endblock %}

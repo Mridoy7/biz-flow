@@ -1,0 +1,59 @@
+{% extends "gst_app/base.html" %}
+{% load gst_extras %}
+{% block title %}Invoices{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="h3 mb-0">Invoices</h1>
+  <a class="btn btn-primary" href="{% url 'invoice_add' %}?next={{ request.get_full_path|urlencode }}">+ Add Invoice</a>
+</div>
+<form class="filter-bar">
+  {{ form.supplier|add_class:"form-select" }}
+  {{ form.invoice_number|add_class:"form-control" }}
+  {{ form.start_date|add_class:"form-control" }}
+  {{ form.end_date|add_class:"form-control" }}
+  <button class="btn btn-outline-secondary">Filter</button>
+  <a class="btn btn-outline-secondary" href="{% url 'invoice_export' 'pdf' %}?{{ request.GET.urlencode }}">PDF</a>
+  <a class="btn btn-outline-secondary" href="{% url 'invoice_export' 'xlsx' %}?{{ request.GET.urlencode }}">Excel</a>
+  <a class="btn btn-outline-secondary" href="{% url 'invoice_export' 'csv' %}?{{ request.GET.urlencode }}">CSV</a>
+</form>
+{% include "gst_app/partials/invoice_table.html" with invoices=invoices %}
+
+<div class="modal fade" id="invoicePreviewModal" tabindex="-1" aria-labelledby="invoicePreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="invoicePreviewTitle">Invoice Preview</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body invoice-preview-body">
+        <iframe id="invoicePreviewFrame" title="Uploaded invoice preview"></iframe>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-success" id="invoicePreviewDownload" href="#">Download File</a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const previewModalElement = document.getElementById("invoicePreviewModal");
+  const previewFrame = document.getElementById("invoicePreviewFrame");
+  const previewTitle = document.getElementById("invoicePreviewTitle");
+  const previewDownload = document.getElementById("invoicePreviewDownload");
+
+  document.querySelectorAll(".invoice-preview-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      previewTitle.textContent = button.dataset.invoiceLabel || "Invoice Preview";
+      previewFrame.src = button.dataset.previewUrl;
+      previewDownload.href = button.dataset.downloadUrl;
+      bootstrap.Modal.getOrCreateInstance(previewModalElement).show();
+    });
+  });
+
+  previewModalElement.addEventListener("hidden.bs.modal", () => {
+    previewFrame.src = "";
+    previewDownload.removeAttribute("href");
+  });
+</script>
+{% endblock %}
