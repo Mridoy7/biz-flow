@@ -1,14 +1,51 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.urls import reverse
 from django.utils import timezone
 
 
 MONEY_ZERO = Decimal("0.00")
+
+
+class AccountRole(models.TextChoices):
+    STAFF = "staff", "Staff"
+    MANAGER = "manager", "Manager"
+
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
+    role = models.CharField(max_length=20, choices=AccountRole.choices, default=AccountRole.MANAGER)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_role_display()}"
+
+
+def account_role(user):
+    if not user.is_authenticated:
+        return AccountRole.STAFF
+    if user.is_superuser:
+        return AccountRole.MANAGER
+    try:
+        return user.profile.role
+    except UserProfile.DoesNotExist:
+        return AccountRole.MANAGER
+
+
+def is_manager(user):
+    return account_role(user) == AccountRole.MANAGER
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.get_or_create(user=instance)
 
 
 class TimestampedModel(models.Model):
@@ -65,6 +102,7 @@ class Invoice(TimestampedModel):
 class EndOfDay(TimestampedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="end_of_day_records")
     date = models.DateField()
+    site_name = models.CharField(max_length=120, blank=True)
     entered_by = models.CharField(max_length=120)
     uber_eats = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
     doordash = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)

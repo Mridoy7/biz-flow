@@ -9,7 +9,9 @@
   </div>
   <div class="action-row">
     <a class="btn btn-primary" href="{% url 'invoice_add' %}?next={{ request.get_full_path|urlencode }}">+ Add Invoice</a>
-    <a class="btn btn-success" href="{% url 'endofday_add' %}?next={{ request.get_full_path|urlencode }}">+ Add End of Day</a>
+    {% if can_manage_dayend %}
+      <a class="btn btn-success" href="{% url 'endofday_add' %}?next={{ request.get_full_path|urlencode }}">+ Add End of Day</a>
+    {% endif %}
   </div>
 </div>
 

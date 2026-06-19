@@ -1,6 +1,23 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
 
-from .models import AuditLog, EndOfDay, Invoice, Supplier
+from .models import AuditLog, EndOfDay, Invoice, Supplier, UserProfile
+
+
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    can_delete = False
+    extra = 0
+    verbose_name_plural = "Account role"
+
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UserAdmin(BaseUserAdmin):
+    inlines = (UserProfileInline,)
 
 
 @admin.register(Supplier)

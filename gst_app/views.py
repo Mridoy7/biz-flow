@@ -15,7 +15,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 
 from .forms import EndOfDayForm, EndOfDayReportForm, InvoiceForm, InvoiceReportForm, SignupForm, SupplierForm
-from .models import EndOfDay, Invoice, Supplier
+from .models import EndOfDay, Invoice, Supplier, is_manager
 from .pdf import endofday_pdf, invoice_pdf, money, report_pdf
 from .services import snapshot_instance, write_audit_logs
 
@@ -25,6 +25,17 @@ def safe_next_url(request, fallback):
     if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
         return next_url
     return fallback
+
+
+def require_dayend_manager(user):
+    if not is_manager(user):
+        raise PermissionDenied("Only managers can add, edit, or delete End of Day records.")
+
+
+def owned_or_all(queryset, user):
+    if is_manager(user):
+        return queryset
+    return queryset.filter(user=user)
 
 
 def home(request):
@@ -48,8 +59,8 @@ def signup(request):
 
 @login_required
 def dashboard(request):
-    invoices = Invoice.objects.filter(user=request.user)
-    endofday_records = EndOfDay.objects.filter(user=request.user, archived_at__isnull=True)
+    invoices = owned_or_all(Invoice.objects.all(), request.user)
+    endofday_records = owned_or_all(EndOfDay.objects.filter(archived_at__isnull=True), request.user)
     context = {
         "invoice_count": invoices.count(),
         "recent_invoices": invoices.select_related("supplier")[:5],
@@ -62,7 +73,7 @@ def dashboard(request):
 @login_required
 def supplier_list(request):
     query = request.GET.get("q", "")
-    suppliers = Supplier.objects.filter(user=request.user)
+    suppliers = Supplier.objects.all()
     if query:
         suppliers = suppliers.filter(name__icontains=query)
     return render(request, "gst_app/supplier_list.html", {"suppliers": suppliers, "query": query})
@@ -72,13 +83,14 @@ def supplier_list(request):
 def supplier_form(request, pk=None):
     supplier = None
     if pk:
-        supplier = get_object_or_404(Supplier, pk=pk, user=request.user)
+        supplier = get_object_or_404(Supplier, pk=pk)
     before = snapshot_instance(supplier, ["name"]) if supplier else {}
     if request.method == "POST":
         form = SupplierForm(request.POST, instance=supplier)
         if form.is_valid():
             saved = form.save(commit=False)
-            saved.user = request.user
+            if not saved.pk:
+                saved.user = request.user
             saved.save()
             write_audit_logs(request.user, saved, before, ["name"])
             messages.success(request, "Supplier saved.")
@@ -96,7 +108,7 @@ def invoice_list(request):
 
 
 def filter_invoices(user, params):
-    invoices = Invoice.objects.filter(user=user).select_related("supplier")
+    invoices = owned_or_all(Invoice.objects.all(), user).select_related("supplier")
     supplier = params.get("supplier")
     invoice_number = params.get("invoice_number")
     start_date = params.get("start_date")
@@ -116,14 +128,15 @@ def filter_invoices(user, params):
 def invoice_form(request, pk=None):
     invoice = None
     if pk:
-        invoice = get_object_or_404(Invoice, pk=pk, user=request.user)
+        invoice = get_object_or_404(owned_or_all(Invoice.objects.all(), request.user), pk=pk)
     cancel_url = safe_next_url(request, reverse("invoice_list"))
     before = snapshot_instance(invoice, ["supplier", "invoice_date", "invoice_number", "entered_by", "invoice_amount", "notes"]) if invoice else {}
     if request.method == "POST":
         form = InvoiceForm(request.POST, request.FILES, instance=invoice, user=request.user)
         if form.is_valid():
             saved = form.save(commit=False)
-            saved.user = request.user
+            if not saved.pk:
+                saved.user = request.user
             saved.save()
             write_audit_logs(request.user, saved, before, ["supplier", "invoice_date", "invoice_number", "entered_by", "invoice_amount", "notes"])
             messages.success(request, "Invoice saved.")
@@ -135,19 +148,19 @@ def invoice_form(request, pk=None):
 
 @login_required
 def invoice_detail(request, pk):
-    invoice = get_object_or_404(Invoice.objects.select_related("supplier"), pk=pk, user=request.user)
+    invoice = get_object_or_404(owned_or_all(Invoice.objects.select_related("supplier"), request.user), pk=pk)
     return render(request, "gst_app/invoice_detail.html", {"invoice": invoice})
 
 
 @login_required
 def invoice_pdf_view(request, pk):
-    invoice = get_object_or_404(Invoice.objects.select_related("supplier"), pk=pk, user=request.user)
+    invoice = get_object_or_404(owned_or_all(Invoice.objects.select_related("supplier"), request.user), pk=pk)
     return invoice_pdf(invoice)
 
 
 @login_required
 def invoice_file_download(request, pk):
-    invoice = get_object_or_404(Invoice, pk=pk, user=request.user)
+    invoice = get_object_or_404(owned_or_all(Invoice.objects.all(), request.user), pk=pk)
     if not invoice.invoice_file:
         raise Http404("No uploaded invoice file found.")
     filename = Path(invoice.invoice_file.name).name
@@ -156,7 +169,7 @@ def invoice_file_download(request, pk):
 
 @login_required
 def invoice_file_preview(request, pk):
-    invoice = get_object_or_404(Invoice, pk=pk, user=request.user)
+    invoice = get_object_or_404(owned_or_all(Invoice.objects.all(), request.user), pk=pk)
     if not invoice.invoice_file:
         raise Http404("No uploaded invoice file found.")
     filename = Path(invoice.invoice_file.name).name
@@ -173,12 +186,12 @@ def endofday_list(request):
 
 @login_required
 def archived_endofday_list(request):
-    records = EndOfDay.objects.filter(user=request.user, archived_at__isnull=False)
+    records = owned_or_all(EndOfDay.objects.filter(archived_at__isnull=False), request.user)
     return render(request, "gst_app/archived_endofday_list.html", {"records": records})
 
 
 def filter_endofday(user, params):
-    records = EndOfDay.objects.filter(user=user, archived_at__isnull=True)
+    records = owned_or_all(EndOfDay.objects.filter(archived_at__isnull=True), user)
     today = timezone.localdate()
     period = params.get("period")
     start_date = params.get("start_date")
@@ -202,19 +215,22 @@ def filter_endofday(user, params):
 
 @login_required
 def endofday_form(request, pk=None):
+    require_dayend_manager(request.user)
     record = None
     if pk:
-        record = get_object_or_404(EndOfDay, pk=pk, user=request.user, archived_at__isnull=True)
+        record = get_object_or_404(EndOfDay, pk=pk, archived_at__isnull=True)
     cancel_url = safe_next_url(request, reverse("endofday_list"))
-    before = snapshot_instance(record, EndOfDayForm.money_fields + ["date", "entered_by", "note"]) if record else {}
+    audited_fields = EndOfDayForm.money_fields + ["date", "site_name", "entered_by", "note"]
+    before = snapshot_instance(record, audited_fields) if record else {}
     if request.method == "POST":
         form = EndOfDayForm(request.POST, instance=record, user=request.user)
         if form.is_valid():
             saved = form.save(commit=False)
-            saved.user = request.user
+            if not saved.pk:
+                saved.user = request.user
             saved.full_clean()
             saved.save()
-            write_audit_logs(request.user, saved, before, EndOfDayForm.money_fields + ["date", "entered_by", "note"])
+            write_audit_logs(request.user, saved, before, audited_fields)
             messages.success(request, "End of Day saved. PDF is ready to download.")
             return redirect(saved)
     else:
@@ -224,19 +240,20 @@ def endofday_form(request, pk=None):
 
 @login_required
 def endofday_detail(request, pk):
-    record = get_object_or_404(EndOfDay, pk=pk, user=request.user)
+    record = get_object_or_404(owned_or_all(EndOfDay.objects.all(), request.user), pk=pk)
     return render(request, "gst_app/endofday_detail.html", {"record": record})
 
 
 @login_required
 def endofday_pdf_view(request, pk):
-    record = get_object_or_404(EndOfDay, pk=pk, user=request.user)
-    return endofday_pdf(record)
+    record = get_object_or_404(owned_or_all(EndOfDay.objects.all(), request.user), pk=pk)
+    return endofday_pdf(record, as_attachment=request.GET.get("download") == "1")
 
 
 @login_required
 def endofday_archive(request, pk):
-    record = get_object_or_404(EndOfDay, pk=pk, user=request.user, archived_at__isnull=True)
+    require_dayend_manager(request.user)
+    record = get_object_or_404(EndOfDay, pk=pk, archived_at__isnull=True)
     if request.method != "POST":
         raise PermissionDenied
     record.archive(request.user)
@@ -255,8 +272,8 @@ def invoice_export(request, filetype):
 @login_required
 def endofday_export(request, filetype):
     records = filter_endofday(request.user, request.GET)
-    rows = [[r.date, r.entered_by, money(r.total_sales), money(r.total_value), money(r.difference), money(r.net_shop_sales)] for r in records]
-    headers = ["Date", "Entered By", "Total Sales", "Total Value", "Difference", "Net Shop Sales"]
+    rows = [[r.date, r.site_name or "-", r.entered_by, money(r.total_sales), money(r.total_value), money(r.difference), money(r.net_shop_sales)] for r in records]
+    headers = ["Date", "Site Name", "Entered By", "Total Sales", "Total Value", "Difference", "Net Shop Sales"]
     return export_rows(filetype, "end-of-day-report", headers, rows)
 
 

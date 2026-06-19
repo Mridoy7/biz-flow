@@ -4,39 +4,47 @@
     {% if compact %}
       <thead><tr><th>Date</th><th>Entered By</th><th>Net Shop Sales</th><th></th></tr></thead>
     {% else %}
-      <thead><tr><th>Date</th><th>Entered By</th><th>Total Sales</th><th>Difference</th><th></th></tr></thead>
+      <thead><tr><th>Date</th><th>Site Name</th><th>Entered By</th><th>Total Sales</th><th>Difference</th><th></th></tr></thead>
     {% endif %}
     <tbody>
       {% for record in records %}
         <tr>
           <td>{{ record.date }}</td>
-          <td>{{ record.entered_by }}</td>
           {% if compact %}
+            <td>{{ record.entered_by }}</td>
             <td>{{ record.net_shop_sales|currency }}</td>
             <td class="text-end">
-              <form method="post" action="{% url 'endofday_archive' record.pk %}" class="d-inline">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
-              </form>
+              {% if can_manage_dayend %}
+                <form method="post" action="{% url 'endofday_archive' record.pk %}" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                </form>
+              {% endif %}
             </td>
           {% else %}
+            <td>{{ record.site_name|default:"-" }}</td>
+            <td>{{ record.entered_by }}</td>
             <td>{{ record.total_sales|currency }}</td>
             <td>{{ record.difference|currency }}</td>
             <td class="text-end">
               <a class="btn btn-sm btn-outline-primary" href="{% url 'endofday_detail' record.pk %}">View</a>
-              <a class="btn btn-sm btn-outline-secondary" href="{% url 'endofday_edit' record.pk %}">Edit</a>
-              <a class="btn btn-sm btn-outline-secondary" href="{% url 'endofday_pdf' record.pk %}">PDF</a>
-              <form method="post" action="{% url 'endofday_archive' record.pk %}" class="d-inline">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
-              </form>
+              {% if can_manage_dayend %}
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'endofday_edit' record.pk %}">Edit</a>
+              {% endif %}
+              <button class="btn btn-sm btn-outline-secondary endofday-preview-button" type="button" data-preview-url="{% url 'endofday_pdf' record.pk %}" data-download-url="{% url 'endofday_pdf' record.pk %}?download=1" data-endofday-label="Day End {{ record.date }}">Preview PDF</button>
+              {% if can_manage_dayend %}
+                <form method="post" action="{% url 'endofday_archive' record.pk %}" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                </form>
+              {% endif %}
             </td>
           {% endif %}
         </tr>
       {% empty %}
-        <tr><td colspan="{% if compact %}4{% else %}5{% endif %}">No End of Day records found.</td></tr>
+        <tr><td colspan="{% if compact %}4{% else %}6{% endif %}">No End of Day records found.</td></tr>
       {% endfor %}
     </tbody>
   </table>

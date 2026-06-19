@@ -11,6 +11,7 @@
     <thead>
       <tr>
         <th>Date</th>
+        <th>Site Name</th>
         <th>Entered By</th>
         <th>Net Shop Sales</th>
         <th>Archived At</th>
@@ -21,18 +22,58 @@
       {% for record in records %}
         <tr>
           <td>{{ record.date }}</td>
+          <td>{{ record.site_name|default:"-" }}</td>
           <td>{{ record.entered_by }}</td>
           <td>{{ record.net_shop_sales|currency }}</td>
           <td>{{ record.archived_at }}</td>
           <td class="text-end">
             <a class="btn btn-sm btn-outline-primary" href="{% url 'endofday_detail' record.pk %}">View</a>
-            <a class="btn btn-sm btn-outline-secondary" href="{% url 'endofday_pdf' record.pk %}">PDF</a>
+            <button class="btn btn-sm btn-outline-secondary endofday-preview-button" type="button" data-preview-url="{% url 'endofday_pdf' record.pk %}" data-download-url="{% url 'endofday_pdf' record.pk %}?download=1" data-endofday-label="Day End {{ record.date }}">Preview PDF</button>
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="5">No archived End of Day records found.</td></tr>
+        <tr><td colspan="6">No archived End of Day records found.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+<div class="modal fade" id="endofdayPreviewModal" tabindex="-1" aria-labelledby="endofdayPreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="endofdayPreviewTitle">Day End PDF Preview</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body pdf-preview-body">
+        <iframe id="endofdayPreviewFrame" title="Day End PDF preview"></iframe>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-success" id="endofdayPreviewDownload" href="#">Download PDF</a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const endofdayPreviewModalElement = document.getElementById("endofdayPreviewModal");
+  const endofdayPreviewFrame = document.getElementById("endofdayPreviewFrame");
+  const endofdayPreviewTitle = document.getElementById("endofdayPreviewTitle");
+  const endofdayPreviewDownload = document.getElementById("endofdayPreviewDownload");
+
+  document.querySelectorAll(".endofday-preview-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      endofdayPreviewTitle.textContent = button.dataset.endofdayLabel || "Day End PDF Preview";
+      endofdayPreviewFrame.src = button.dataset.previewUrl;
+      endofdayPreviewDownload.href = button.dataset.downloadUrl;
+      bootstrap.Modal.getOrCreateInstance(endofdayPreviewModalElement).show();
+    });
+  });
+
+  endofdayPreviewModalElement.addEventListener("hidden.bs.modal", () => {
+    endofdayPreviewFrame.src = "";
+    endofdayPreviewDownload.removeAttribute("href");
+  });
+</script>
 {% endblock %}

@@ -6,7 +6,9 @@
   <h1 class="h3 mb-0">End of Day</h1>
   <div class="action-row">
     <a class="btn btn-outline-secondary" href="{% url 'archived_endofday_list' %}">Archived</a>
-    <a class="btn btn-success" href="{% url 'endofday_add' %}?next={{ request.get_full_path|urlencode }}">+ Add End of Day</a>
+    {% if can_manage_dayend %}
+      <a class="btn btn-success" href="{% url 'endofday_add' %}?next={{ request.get_full_path|urlencode }}">+ Add End of Day</a>
+    {% endif %}
   </div>
 </div>
 <form class="filter-bar">
@@ -19,4 +21,43 @@
   <a class="btn btn-outline-secondary" href="{% url 'endofday_export' 'csv' %}?{{ request.GET.urlencode }}">CSV</a>
 </form>
 {% include "gst_app/partials/endofday_table.html" with records=records %}
+
+<div class="modal fade" id="endofdayPreviewModal" tabindex="-1" aria-labelledby="endofdayPreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="endofdayPreviewTitle">Day End PDF Preview</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body pdf-preview-body">
+        <iframe id="endofdayPreviewFrame" title="Day End PDF preview"></iframe>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-success" id="endofdayPreviewDownload" href="#">Download PDF</a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const endofdayPreviewModalElement = document.getElementById("endofdayPreviewModal");
+  const endofdayPreviewFrame = document.getElementById("endofdayPreviewFrame");
+  const endofdayPreviewTitle = document.getElementById("endofdayPreviewTitle");
+  const endofdayPreviewDownload = document.getElementById("endofdayPreviewDownload");
+
+  document.querySelectorAll(".endofday-preview-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      endofdayPreviewTitle.textContent = button.dataset.endofdayLabel || "Day End PDF Preview";
+      endofdayPreviewFrame.src = button.dataset.previewUrl;
+      endofdayPreviewDownload.href = button.dataset.downloadUrl;
+      bootstrap.Modal.getOrCreateInstance(endofdayPreviewModalElement).show();
+    });
+  });
+
+  endofdayPreviewModalElement.addEventListener("hidden.bs.modal", () => {
+    endofdayPreviewFrame.src = "";
+    endofdayPreviewDownload.removeAttribute("href");
+  });
+</script>
 {% endblock %}

@@ -73,7 +73,7 @@ class InvoiceForm(forms.ModelForm):
         self.fields["invoice_date"].initial = (self.instance.invoice_date if self.instance.pk else today).isoformat()
         self.fields["invoice_date"].widget.attrs.update({"min": today.isoformat(), "max": today.isoformat()})
         if user is not None:
-            self.fields["supplier"].queryset = Supplier.objects.filter(user=user)
+            self.fields["supplier"].queryset = Supplier.objects.all()
 
     def clean_invoice_date(self):
         invoice_date = self.cleaned_data["invoice_date"]
@@ -104,7 +104,7 @@ class EndOfDayForm(forms.ModelForm):
 
     class Meta:
         model = EndOfDay
-        fields = ("date", "entered_by", *END_OF_DAY_MONEY_FIELDS, "note")
+        fields = ("date", "site_name", "entered_by", *END_OF_DAY_MONEY_FIELDS, "note")
         widgets = {
             "date": DateInput(),
             "note": forms.Textarea(attrs={"rows": 3}),
