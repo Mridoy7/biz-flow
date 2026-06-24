@@ -42,6 +42,8 @@
     </p>
     <div class="form-grid">
       {% for field in form %}
+        {% if field|is_fuel_dip_field %}
+        {% else %}
         <div class="{% if field.name == 'note' or field|is_file_field %}span-2{% endif %}">
           {% if field|is_file_field %}
             <div class="upload-card" data-upload-card>
@@ -70,8 +72,92 @@
             {{ field.errors }}
           {% endif %}
         </div>
+        {% endif %}
       {% endfor %}
     </div>
+    <section class="fuel-dip-panel">
+      <div class="fuel-dip-panel-header">
+        <strong>Tank dips</strong>
+      </div>
+      <div class="fuel-dip-row">
+        <span class="fuel-dip-number">1</span>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_1_name.id_for_label }}">Fuel dip 1 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_1_name|add_class:"form-control" }}
+          {{ form.fuel_dip_1_name.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_1_value.id_for_label }}">Dip value 1 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_1_value|add_class:"form-control" }}
+          {{ form.fuel_dip_1_value.errors }}
+        </div>
+      </div>
+      <div class="fuel-dip-row">
+        <span class="fuel-dip-number">2</span>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_2_name.id_for_label }}">Fuel dip 2 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_2_name|add_class:"form-control" }}
+          {{ form.fuel_dip_2_name.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_2_value.id_for_label }}">Dip value 2 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_2_value|add_class:"form-control" }}
+          {{ form.fuel_dip_2_value.errors }}
+        </div>
+      </div>
+      <div class="fuel-dip-row">
+        <span class="fuel-dip-number">3</span>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_3_name.id_for_label }}">Fuel dip 3 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_3_name|add_class:"form-control" }}
+          {{ form.fuel_dip_3_name.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_3_value.id_for_label }}">Dip value 3 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_3_value|add_class:"form-control" }}
+          {{ form.fuel_dip_3_value.errors }}
+        </div>
+      </div>
+      <div class="fuel-dip-row">
+        <span class="fuel-dip-number">4</span>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_4_name.id_for_label }}">Fuel dip 4 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_4_name|add_class:"form-control" }}
+          {{ form.fuel_dip_4_name.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_4_value.id_for_label }}">Dip value 4 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_4_value|add_class:"form-control" }}
+          {{ form.fuel_dip_4_value.errors }}
+        </div>
+      </div>
+      <div class="fuel-dip-row">
+        <span class="fuel-dip-number">5</span>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_5_name.id_for_label }}">Fuel dip 5 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_5_name|add_class:"form-control" }}
+          {{ form.fuel_dip_5_name.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_5_value.id_for_label }}">Dip value 5 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_5_value|add_class:"form-control" }}
+          {{ form.fuel_dip_5_value.errors }}
+        </div>
+      </div>
+      <div class="fuel-dip-row">
+        <span class="fuel-dip-number">6</span>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_6_name.id_for_label }}">Fuel dip 6 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_6_name|add_class:"form-control" }}
+          {{ form.fuel_dip_6_name.errors }}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.fuel_dip_6_value.id_for_label }}">Dip value 6 <span class="required-marker">*</span></label>
+          {{ form.fuel_dip_6_value|add_class:"form-control" }}
+          {{ form.fuel_dip_6_value.errors }}
+        </div>
+      </div>
+    </section>
     <div class="mt-3 d-flex gap-2">
       <button class="btn btn-primary" type="submit">Save</button>
       {% if record %}<a class="btn btn-outline-secondary" href="{% url 'endofday_pdf' record.pk %}">Preview PDF</a>{% endif %}
@@ -101,11 +187,12 @@
     "gross_shop_sales",
     "ezy_pin",
     "less_surcharge",
-    "fuel_dip_e85",
-    "fuel_dip_unleaded_91",
-    "fuel_dip_unleaded_95",
-    "fuel_dip_unleaded_98",
-    "fuel_dip_diesel"
+    "fuel_dip_1_value",
+    "fuel_dip_2_value",
+    "fuel_dip_3_value",
+    "fuel_dip_4_value",
+    "fuel_dip_5_value",
+    "fuel_dip_6_value"
   ];
   const totalSalesInput = document.getElementById("id_total_sales");
   let totalSalesEntered = Boolean(totalSalesInput && !["", "0", "0.0", "0.00"].includes(totalSalesInput.value.trim()));

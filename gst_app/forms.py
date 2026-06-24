@@ -31,11 +31,18 @@ END_OF_DAY_MONEY_FIELDS = [
 ]
 
 END_OF_DAY_FUEL_DIP_FIELDS = [
-    "fuel_dip_e85",
-    "fuel_dip_unleaded_91",
-    "fuel_dip_unleaded_95",
-    "fuel_dip_unleaded_98",
-    "fuel_dip_diesel",
+    "fuel_dip_1_name",
+    "fuel_dip_1_value",
+    "fuel_dip_2_name",
+    "fuel_dip_2_value",
+    "fuel_dip_3_name",
+    "fuel_dip_3_value",
+    "fuel_dip_4_name",
+    "fuel_dip_4_value",
+    "fuel_dip_5_name",
+    "fuel_dip_5_value",
+    "fuel_dip_6_name",
+    "fuel_dip_6_value",
 ]
 
 
@@ -142,14 +149,15 @@ class EndOfDayForm(forms.ModelForm):
             self.fields[field].widget.attrs.update({"step": "0.01", "min": "0"})
         for field in self.fuel_dip_fields:
             self.fields[field].required = True
-            self.fields[field].widget.attrs.update({"step": "0.01", "min": "0"})
+        for index in range(1, 7):
+            name_field = f"fuel_dip_{index}_name"
+            value_field = f"fuel_dip_{index}_value"
+            self.fields[name_field].label = f"Fuel dip {index}"
+            self.fields[name_field].widget.attrs.update({"placeholder": "E85 tank 1"})
+            self.fields[value_field].label = f"Dip value {index}"
+            self.fields[value_field].widget.attrs.update({"step": "0.01", "min": "0", "placeholder": "0.00"})
         self.fields["vault_drop"].label = "Vault Drop / Cash Drop"
         self.fields["total_sales"].label = "Terminal Total"
-        self.fields["fuel_dip_e85"].label = "Fuel Dip - E85"
-        self.fields["fuel_dip_unleaded_91"].label = "Fuel Dip - Unleaded 91"
-        self.fields["fuel_dip_unleaded_95"].label = "Fuel Dip - Unleaded 95"
-        self.fields["fuel_dip_unleaded_98"].label = "Fuel Dip - Unleaded 98"
-        self.fields["fuel_dip_diesel"].label = "Fuel Dip - Diesel"
         self.fields["master_sheet_file"].label = "Master Sheet"
         self.fields["end_of_days_file"].label = "End Of Days"
         for field in ("master_sheet_file", "end_of_days_file"):
@@ -171,7 +179,7 @@ class EndOfDayForm(forms.ModelForm):
                 cleaned[field] = 0
         for field in self.fuel_dip_fields:
             if cleaned.get(field) in (None, ""):
-                self.add_error(field, f"{self.fields[field].label} is required. Enter 0 if there is no reading.")
+                self.add_error(field, f"{self.fields[field].label} is required.")
 
         date = cleaned.get("date")
         today = timezone.localdate()

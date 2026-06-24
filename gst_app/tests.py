@@ -111,11 +111,18 @@ class SameDayFormValidationTests(TestCase):
             "gross_shop_sales": "0",
             "ezy_pin": "0",
             "less_surcharge": "0",
-            "fuel_dip_e85": "0",
-            "fuel_dip_unleaded_91": "0",
-            "fuel_dip_unleaded_95": "0",
-            "fuel_dip_unleaded_98": "0",
-            "fuel_dip_diesel": "0",
+            "fuel_dip_1_name": "E85 tank 1",
+            "fuel_dip_1_value": "0",
+            "fuel_dip_2_name": "Unleaded 91 tank 1",
+            "fuel_dip_2_value": "0",
+            "fuel_dip_3_name": "Unleaded 95 tank 1",
+            "fuel_dip_3_value": "0",
+            "fuel_dip_4_name": "Unleaded 98 tank 1",
+            "fuel_dip_4_value": "0",
+            "fuel_dip_5_name": "Diesel tank 1",
+            "fuel_dip_5_value": "0",
+            "fuel_dip_6_name": "Diesel tank 2",
+            "fuel_dip_6_value": "0",
         }
         data.update(overrides)
         return data
@@ -205,22 +212,22 @@ class SameDayFormValidationTests(TestCase):
         form = EndOfDayForm(user=self.user)
 
         self.assertEqual(form.fields["total_sales"].label, "Terminal Total")
-        self.assertEqual(form.fields["fuel_dip_e85"].label, "Fuel Dip - E85")
-        self.assertEqual(form.fields["fuel_dip_unleaded_91"].label, "Fuel Dip - Unleaded 91")
-        self.assertEqual(form.fields["fuel_dip_unleaded_95"].label, "Fuel Dip - Unleaded 95")
-        self.assertEqual(form.fields["fuel_dip_unleaded_98"].label, "Fuel Dip - Unleaded 98")
-        self.assertEqual(form.fields["fuel_dip_diesel"].label, "Fuel Dip - Diesel")
-        self.assertTrue(form.fields["fuel_dip_e85"].required)
+        self.assertEqual(form.fields["fuel_dip_1_name"].label, "Fuel dip 1")
+        self.assertEqual(form.fields["fuel_dip_1_value"].label, "Dip value 1")
+        self.assertEqual(form.fields["fuel_dip_6_name"].label, "Fuel dip 6")
+        self.assertEqual(form.fields["fuel_dip_6_value"].label, "Dip value 6")
+        self.assertTrue(form.fields["fuel_dip_1_name"].required)
+        self.assertTrue(form.fields["fuel_dip_6_value"].required)
         self.assertTrue(form.fields["master_sheet_file"].required)
         self.assertTrue(form.fields["end_of_days_file"].required)
 
     def test_endofday_form_requires_fuel_dips_and_day_sheet_uploads(self):
         data = self.endofday_required_data()
-        data.pop("fuel_dip_e85")
+        data.pop("fuel_dip_1_name")
         form = EndOfDayForm(data=data, user=self.user)
 
         self.assertFalse(form.is_valid())
-        self.assertIn("fuel_dip_e85", form.errors)
+        self.assertIn("fuel_dip_1_name", form.errors)
         self.assertIn("master_sheet_file", form.errors)
         self.assertIn("end_of_days_file", form.errors)
 
@@ -336,11 +343,18 @@ class EndOfDayFileUploadTests(TestCase):
                     "gross_shop_sales": "0",
                     "ezy_pin": "0",
                     "less_surcharge": "0",
-                    "fuel_dip_e85": "0",
-                    "fuel_dip_unleaded_91": "0",
-                    "fuel_dip_unleaded_95": "0",
-                    "fuel_dip_unleaded_98": "0",
-                    "fuel_dip_diesel": "0",
+                    "fuel_dip_1_name": "E85 tank 1",
+                    "fuel_dip_1_value": "0",
+                    "fuel_dip_2_name": "Unleaded 91 tank 1",
+                    "fuel_dip_2_value": "0",
+                    "fuel_dip_3_name": "Unleaded 95 tank 1",
+                    "fuel_dip_3_value": "0",
+                    "fuel_dip_4_name": "Unleaded 98 tank 1",
+                    "fuel_dip_4_value": "0",
+                    "fuel_dip_5_name": "Diesel tank 1",
+                    "fuel_dip_5_value": "0",
+                    "fuel_dip_6_name": "Diesel tank 2",
+                    "fuel_dip_6_value": "0",
                     "master_sheet_file": master_sheet,
                     "end_of_days_file": end_of_days,
                 },
@@ -482,11 +496,18 @@ class PdfContentTests(TestCase):
             user=self.user,
             date=timezone.localdate(),
             entered_by="Ridoy",
-            fuel_dip_e85=100,
-            fuel_dip_unleaded_91=200,
-            fuel_dip_unleaded_95=300,
-            fuel_dip_unleaded_98=400,
-            fuel_dip_diesel=500,
+            fuel_dip_1_name="E85 tank 1",
+            fuel_dip_1_value=100,
+            fuel_dip_2_name="Unleaded 91 tank 1",
+            fuel_dip_2_value=200,
+            fuel_dip_3_name="Unleaded 95 tank 1",
+            fuel_dip_3_value=300,
+            fuel_dip_4_name="Unleaded 98 tank 1",
+            fuel_dip_4_value=400,
+            fuel_dip_5_name="Diesel tank 1",
+            fuel_dip_5_value=500,
+            fuel_dip_6_name="Diesel tank 2",
+            fuel_dip_6_value=600,
             total_sales=0,
             ezy_pin=0,
             less_surcharge=0,
@@ -495,12 +516,13 @@ class PdfContentTests(TestCase):
         daysheet_rows = dict(endofday_daysheet_rows(record))
         fuel_dip_rows = dict(endofday_fuel_dip_rows(record))
 
-        self.assertNotIn("Fuel Dip - E85", daysheet_rows)
-        self.assertEqual(fuel_dip_rows["Fuel Dip - E85"], Decimal("100"))
-        self.assertEqual(fuel_dip_rows["Fuel Dip - Unleaded 91"], Decimal("200"))
-        self.assertEqual(fuel_dip_rows["Fuel Dip - Unleaded 95"], Decimal("300"))
-        self.assertEqual(fuel_dip_rows["Fuel Dip - Unleaded 98"], Decimal("400"))
-        self.assertEqual(fuel_dip_rows["Fuel Dip - Diesel"], Decimal("500"))
+        self.assertNotIn("Fuel Dip - E85 tank 1", daysheet_rows)
+        self.assertEqual(fuel_dip_rows["Fuel Dip - E85 tank 1"], Decimal("100"))
+        self.assertEqual(fuel_dip_rows["Fuel Dip - Unleaded 91 tank 1"], Decimal("200"))
+        self.assertEqual(fuel_dip_rows["Fuel Dip - Unleaded 95 tank 1"], Decimal("300"))
+        self.assertEqual(fuel_dip_rows["Fuel Dip - Unleaded 98 tank 1"], Decimal("400"))
+        self.assertEqual(fuel_dip_rows["Fuel Dip - Diesel tank 1"], Decimal("500"))
+        self.assertEqual(fuel_dip_rows["Fuel Dip - Diesel tank 2"], Decimal("600"))
 
     def test_endofday_detail_includes_store_value_and_payment_lines(self):
         record = EndOfDay.objects.create(
@@ -528,11 +550,12 @@ class PdfContentTests(TestCase):
             user=self.user,
             date=timezone.localdate(),
             entered_by="Ridoy",
-            fuel_dip_e85=100,
-            fuel_dip_unleaded_91=200,
-            fuel_dip_unleaded_95=300,
-            fuel_dip_unleaded_98=400,
-            fuel_dip_diesel=500,
+            fuel_dip_1_name="E85 tank 1",
+            fuel_dip_1_value=100,
+            fuel_dip_2_name="Unleaded 91 tank 1",
+            fuel_dip_2_value=200,
+            fuel_dip_6_name="Diesel tank 2",
+            fuel_dip_6_value=600,
             total_sales=0,
             ezy_pin=0,
             less_surcharge=0,
@@ -541,9 +564,9 @@ class PdfContentTests(TestCase):
         response = self.client.get(f"/end-of-day/{record.pk}/")
 
         self.assertContains(response, "Fuel Dips")
-        self.assertContains(response, "E85")
-        self.assertContains(response, "Unleaded 91")
-        self.assertContains(response, "Diesel")
+        self.assertContains(response, "E85 tank 1")
+        self.assertContains(response, "Unleaded 91 tank 1")
+        self.assertContains(response, "Diesel tank 2")
 
     def test_endofday_pdf_can_download_after_preview(self):
         record = EndOfDay.objects.create(
@@ -567,11 +590,12 @@ class PdfContentTests(TestCase):
                 user=self.user,
                 date=timezone.localdate(),
                 entered_by="Ridoy",
-                fuel_dip_e85=100,
-                fuel_dip_unleaded_91=200,
-                fuel_dip_unleaded_95=300,
-                fuel_dip_unleaded_98=400,
-                fuel_dip_diesel=500,
+                fuel_dip_1_name="E85 tank 1",
+                fuel_dip_1_value=100,
+                fuel_dip_2_name="Unleaded 91 tank 1",
+                fuel_dip_2_value=200,
+                fuel_dip_6_name="Diesel tank 2",
+                fuel_dip_6_value=600,
                 total_sales=0,
                 ezy_pin=0,
                 less_surcharge=0,
@@ -701,11 +725,18 @@ class EndOfDayArchiveTests(TestCase):
                 "gross_shop_sales": "0",
                 "ezy_pin": "0",
                 "less_surcharge": "0",
-                "fuel_dip_e85": "0",
-                "fuel_dip_unleaded_91": "0",
-                "fuel_dip_unleaded_95": "0",
-                "fuel_dip_unleaded_98": "0",
-                "fuel_dip_diesel": "0",
+                "fuel_dip_1_name": "E85 tank 1",
+                "fuel_dip_1_value": "0",
+                "fuel_dip_2_name": "Unleaded 91 tank 1",
+                "fuel_dip_2_value": "0",
+                "fuel_dip_3_name": "Unleaded 95 tank 1",
+                "fuel_dip_3_value": "0",
+                "fuel_dip_4_name": "Unleaded 98 tank 1",
+                "fuel_dip_4_value": "0",
+                "fuel_dip_5_name": "Diesel tank 1",
+                "fuel_dip_5_value": "0",
+                "fuel_dip_6_name": "Diesel tank 2",
+                "fuel_dip_6_value": "0",
             },
             files={
                 "master_sheet_file": SimpleUploadedFile("master-sheet.pdf", b"%PDF-1.4\nmaster", content_type="application/pdf"),
@@ -747,11 +778,18 @@ class EndOfDayReportExportTests(TestCase):
             user=self.user,
             date=timezone.localdate(),
             entered_by="Ridoy",
-            fuel_dip_e85=100,
-            fuel_dip_unleaded_91=200,
-            fuel_dip_unleaded_95=300,
-            fuel_dip_unleaded_98=400,
-            fuel_dip_diesel=500,
+            fuel_dip_1_name="E85 tank 1",
+            fuel_dip_1_value=100,
+            fuel_dip_2_name="Unleaded 91 tank 1",
+            fuel_dip_2_value=200,
+            fuel_dip_3_name="Unleaded 95 tank 1",
+            fuel_dip_3_value=300,
+            fuel_dip_4_name="Unleaded 98 tank 1",
+            fuel_dip_4_value=400,
+            fuel_dip_5_name="Diesel tank 1",
+            fuel_dip_5_value=500,
+            fuel_dip_6_name="Diesel tank 2",
+            fuel_dip_6_value=600,
             total_sales=0,
             ezy_pin=0,
             less_surcharge=0,
@@ -759,8 +797,9 @@ class EndOfDayReportExportTests(TestCase):
 
         response = self.client.get("/end-of-day/export/csv/")
 
-        self.assertContains(response, "Fuel Dip - E85,Fuel Dip - Unleaded 91,Fuel Dip - Unleaded 95")
-        self.assertContains(response, "100.00,200.00,300.00,400.00,500.00")
+        self.assertContains(response, "Fuel Dip 1,Dip Value 1,Fuel Dip 2,Dip Value 2")
+        self.assertContains(response, "E85 tank 1,100.00,Unleaded 91 tank 1,200.00")
+        self.assertContains(response, "Diesel tank 2,600.00")
 
 
 class AccountRoleAccessTests(TestCase):

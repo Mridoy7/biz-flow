@@ -140,6 +140,18 @@ class EndOfDay(TimestampedModel):
     fuel_dip_unleaded_95 = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
     fuel_dip_unleaded_98 = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
     fuel_dip_diesel = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
+    fuel_dip_1_name = models.CharField(max_length=120, blank=True)
+    fuel_dip_1_value = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
+    fuel_dip_2_name = models.CharField(max_length=120, blank=True)
+    fuel_dip_2_value = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
+    fuel_dip_3_name = models.CharField(max_length=120, blank=True)
+    fuel_dip_3_value = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
+    fuel_dip_4_name = models.CharField(max_length=120, blank=True)
+    fuel_dip_4_value = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
+    fuel_dip_5_name = models.CharField(max_length=120, blank=True)
+    fuel_dip_5_value = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
+    fuel_dip_6_name = models.CharField(max_length=120, blank=True)
+    fuel_dip_6_value = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
     master_sheet_file = models.FileField(upload_to="end-of-day/master-sheets/%Y/%m/", blank=True)
     end_of_days_file = models.FileField(upload_to="end-of-day/end-of-days/%Y/%m/", blank=True)
     note = models.TextField(blank=True)
@@ -190,11 +202,8 @@ class EndOfDay(TimestampedModel):
     @property
     def fuel_dip_items(self):
         return [
-            ("E85", self.fuel_dip_e85),
-            ("Unleaded 91", self.fuel_dip_unleaded_91),
-            ("Unleaded 95", self.fuel_dip_unleaded_95),
-            ("Unleaded 98", self.fuel_dip_unleaded_98),
-            ("Diesel", self.fuel_dip_diesel),
+            (getattr(self, f"fuel_dip_{index}_name", "").strip() or f"Fuel dip {index}", getattr(self, f"fuel_dip_{index}_value"))
+            for index in range(1, 7)
         ]
 
     @property

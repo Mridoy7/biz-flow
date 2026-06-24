@@ -24,6 +24,11 @@ def is_file_field(field):
 
 
 @register.filter
+def is_fuel_dip_field(field):
+    return field.name.startswith("fuel_dip_")
+
+
+@register.filter
 def basename(value):
     if not value:
         return ""

@@ -41,11 +41,10 @@
                 <th class="text-end">Cash</th>
                 <th class="text-end">Vault Drop / Cash Drop</th>
                 <th class="text-end">Terminal Total</th>
-                <th class="text-end">E85</th>
-                <th class="text-end">U91</th>
-                <th class="text-end">U95</th>
-                <th class="text-end">U98</th>
-                <th class="text-end">Diesel</th>
+                <th>Fuel Dip 1</th>
+                <th class="text-end">Value 1</th>
+                <th>Fuel Dip 2</th>
+                <th class="text-end">Value 2</th>
                 <th class="text-end">Net Shop Sales</th>
               </tr>
             </thead>
@@ -58,15 +57,14 @@
                   <td class="text-end">{{ record.cash|currency }}</td>
                   <td class="text-end">{{ record.vault_drop|currency }}</td>
                   <td class="text-end">{{ record.total_sales_with_payments|currency }}</td>
-                  <td class="text-end">{{ record.fuel_dip_e85|floatformat:2 }}</td>
-                  <td class="text-end">{{ record.fuel_dip_unleaded_91|floatformat:2 }}</td>
-                  <td class="text-end">{{ record.fuel_dip_unleaded_95|floatformat:2 }}</td>
-                  <td class="text-end">{{ record.fuel_dip_unleaded_98|floatformat:2 }}</td>
-                  <td class="text-end">{{ record.fuel_dip_diesel|floatformat:2 }}</td>
+                  <td>{{ record.fuel_dip_1_name|default:"-" }}</td>
+                  <td class="text-end">{{ record.fuel_dip_1_value|floatformat:2 }}</td>
+                  <td>{{ record.fuel_dip_2_name|default:"-" }}</td>
+                  <td class="text-end">{{ record.fuel_dip_2_value|floatformat:2 }}</td>
                   <td class="text-end">{{ record.net_shop_sales|currency }}</td>
                 </tr>
               {% empty %}
-                <tr><td colspan="12">No End of Day records found.</td></tr>
+                <tr><td colspan="11">No End of Day records found.</td></tr>
               {% endfor %}
             </tbody>
           </table>
