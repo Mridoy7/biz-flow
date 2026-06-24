@@ -217,14 +217,19 @@ a:hover {
 
 .form-control,
 .form-select {
-  border-color: #cbd5e1;
+  background-color: #ffffff;
+  border-color: #475569;
+  border-width: 2px;
   border-radius: 8px;
+  color: var(--sm-ink);
+  font-weight: 600;
 }
 
 .form-control:focus,
 .form-select:focus {
-  border-color: var(--sm-primary);
-  box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.12);
+  background-color: #ffffff;
+  border-color: #111827;
+  box-shadow: 0 0 0 0.2rem rgba(15, 23, 42, 0.14);
 }
 
 .metric-grid,
@@ -264,6 +269,30 @@ a:hover {
 
 .metric-card {
   border-top: 4px solid var(--sm-primary);
+}
+
+.metric-card--sales {
+  border-top-color: var(--sm-primary);
+}
+
+.metric-card--fuel {
+  border-top-color: var(--sm-warning);
+}
+
+.metric-card--gross {
+  border-top-color: var(--sm-submit);
+}
+
+.metric-card--value {
+  border-top-color: #0f766e;
+}
+
+.metric-card--difference {
+  border-top-color: #7c3aed;
+}
+
+.metric-card--net {
+  border-top-color: var(--sm-delete);
 }
 
 .metric-card span {
@@ -357,9 +386,77 @@ a:hover {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.form-grid > div,
+.stacked-form > div {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  padding: 12px;
+}
+
+.form-grid > div:nth-child(2n),
+.stacked-form > div:nth-child(2n) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.form-grid > div:nth-child(3n),
+.stacked-form > div:nth-child(3n) {
+  background: #e5e7eb;
+  border-color: #64748b;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
+}
+
+.form-grid > div:nth-child(4n),
+.stacked-form > div:nth-child(4n) {
+  background: #ffffff;
+  border-color: #334155;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.09);
+}
+
+.form-grid > div:focus-within,
+.stacked-form > div:focus-within {
+  background: #ffffff;
+  border-color: #111827;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.14), 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
 .form-label {
-  color: #334155;
+  color: #111827;
   font-weight: 700;
+}
+
+.required-marker {
+  color: var(--sm-delete);
+  font-weight: 800;
+}
+
+.upload-card {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.upload-current {
+  color: #1f2937;
+  font-size: 0.92rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.upload-actions {
+  flex: 0 0 auto;
+}
+
+.upload-input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
 }
 
 .span-2 {
@@ -412,6 +509,47 @@ a:hover {
   vertical-align: middle;
 }
 
+.table-dayend tbody tr td:first-child {
+  font-weight: 700;
+}
+
+.line-highlight--blue {
+  background: #eff6ff;
+}
+
+.line-highlight--amber {
+  background: #fffbeb;
+}
+
+.line-highlight--green {
+  background: #ecfdf5;
+}
+
+.line-total td {
+  border-top-width: 2px;
+  font-weight: 800;
+}
+
+.line-total--sales {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.line-total--fuel {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.line-total--gross {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.line-total--net {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .alert {
   border-radius: 8px;
   box-shadow: var(--sm-shadow);
@@ -435,6 +573,36 @@ a:hover {
   display: block;
   height: 70vh;
   width: 100%;
+}
+
+.invoice-preview-unavailable {
+  align-content: center;
+  color: var(--sm-ink);
+  min-height: 70vh;
+  padding: 32px;
+  text-align: center;
+}
+
+.invoice-preview-unavailable strong {
+  display: block;
+  font-size: 1.15rem;
+  margin-bottom: 8px;
+}
+
+.invoice-preview-unavailable p {
+  color: var(--sm-muted);
+  margin: 0;
+}
+
+.report-preview-table {
+  background: var(--sm-surface);
+  border-radius: 8px;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.report-preview-table .table {
+  min-width: 920px;
 }
 
 .modal-content {

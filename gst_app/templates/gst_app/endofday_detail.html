@@ -13,24 +13,113 @@
 </div>
 <div class="metric-grid">
   <section class="metric-card"><span>Site Name</span><strong>{{ record.site_name|default:"-" }}</strong></section>
-  <section class="metric-card"><span>Total Sales</span><strong>{{ record.total_sales|currency }}</strong></section>
-  <section class="metric-card"><span>Gross Shop Sales</span><strong>{{ record.gross_shop_sales|currency }}</strong></section>
-  <section class="metric-card"><span>Total Value</span><strong>{{ record.total_value|currency }}</strong></section>
-  <section class="metric-card"><span>Difference</span><strong>{{ record.difference|currency }}</strong></section>
-  <section class="metric-card"><span>Net Shop Sales</span><strong>{{ record.net_shop_sales|currency }}</strong></section>
+  <section class="metric-card metric-card--sales"><span>Terminal Total</span><strong>{{ record.total_sales_with_payments|currency }}</strong></section>
+  <section class="metric-card metric-card--fuel"><span>Total Fuel Sales</span><strong>{{ record.total_fuel_sales|currency }}</strong></section>
+  <section class="metric-card metric-card--gross"><span>Gross Shop Sales</span><strong>{{ record.gross_shop_sales|currency }}</strong></section>
+  <section class="metric-card metric-card--value"><span>Total sales</span><strong>{{ record.total_value|currency }}</strong></section>
+  <section class="metric-card metric-card--difference"><span>Difference</span><strong>{{ record.difference|currency }}</strong></section>
+  <section class="metric-card metric-card--net"><span>Net Shop Sales</span><strong>{{ record.net_shop_sales|currency }}</strong></section>
 </div>
 <div class="table-responsive">
-  <table class="table align-middle">
+  <table class="table table-dayend align-middle">
     <thead><tr><th>Line</th><th class="text-end">Amount</th></tr></thead>
     <tbody>
       {% for label, amount in record.line_items %}
-        <tr><td>{{ label }}</td><td class="text-end">{{ amount|currency }}</td></tr>
+        <tr class="{% if label == 'Adjusted United Card' %}line-highlight line-highlight--blue{% elif label == 'Store Value Charge' or label == 'IOU Payment' or label == 'Drive Off Payment' %}line-highlight line-highlight--amber{% elif label == 'Cash' or label == 'Vault Drop / Cash Drop' %}line-highlight line-highlight--green{% endif %}">
+          <td>{{ label }}</td>
+          <td class="text-end">{{ amount|currency }}</td>
+        </tr>
       {% endfor %}
+      <tr class="line-total line-total--sales"><td>Terminal Total</td><td class="text-end">{{ record.total_sales_with_payments|currency }}</td></tr>
+      <tr class="line-total line-total--fuel"><td>Total Fuel Sales</td><td class="text-end">{{ record.total_fuel_sales|currency }}</td></tr>
+      <tr class="line-total line-total--gross"><td>Gross Shop Sales</td><td class="text-end">{{ record.gross_shop_sales|currency }}</td></tr>
+      <tr class="line-total line-total--net"><td>Net Shop Sales</td><td class="text-end">{{ record.net_shop_sales|currency }}</td></tr>
     </tbody>
   </table>
 </div>
 <section class="note-block">
+  <strong>Fuel Dips</strong>
+  <div class="table-responsive mt-2">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>Fuel</th><th class="text-end">Dip</th></tr></thead>
+      <tbody>
+        {% for label, amount in record.fuel_dip_items %}
+          <tr>
+            <td>{{ label }}</td>
+            <td class="text-end">{{ amount|floatformat:2 }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="note-block">
   <strong>Note</strong>
   <p>{{ record.note|default:"-" }}</p>
 </section>
+
+<section class="note-block">
+  <strong>Uploaded daysheets</strong>
+  <div class="action-row mt-2">
+    {% if record.master_sheet_file %}
+      <button class="btn btn-sm btn-outline-success endofday-file-preview-button" type="button" data-preview-url="{% url 'endofday_file_preview' record.pk 'master-sheet' %}" data-download-url="{% url 'endofday_file_download' record.pk 'master-sheet' %}" data-previewable="{% if record.master_sheet_is_previewable %}1{% else %}0{% endif %}" data-file-label="Master Sheet">Master Sheet</button>
+    {% else %}
+      <span class="text-secondary">No Master Sheet uploaded.</span>
+    {% endif %}
+    {% if record.end_of_days_file %}
+      <button class="btn btn-sm btn-outline-success endofday-file-preview-button" type="button" data-preview-url="{% url 'endofday_file_preview' record.pk 'end-of-days' %}" data-download-url="{% url 'endofday_file_download' record.pk 'end-of-days' %}" data-previewable="{% if record.end_of_days_is_previewable %}1{% else %}0{% endif %}" data-file-label="End Of Days">End Of Days</button>
+    {% else %}
+      <span class="text-secondary">No End Of Days uploaded.</span>
+    {% endif %}
+  </div>
+</section>
+
+<div class="modal fade" id="endofdayFilePreviewModal" tabindex="-1" aria-labelledby="endofdayFilePreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="endofdayFilePreviewTitle">Day End File Preview</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body invoice-preview-body">
+        <iframe id="endofdayFilePreviewFrame" title="Day End uploaded file preview"></iframe>
+        <div class="invoice-preview-unavailable d-none" id="endofdayFilePreviewUnavailable">
+          <strong>Preview not available for this file type.</strong>
+          <p>Use the download button below when you are ready to open the uploaded file.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-success" id="endofdayFilePreviewDownload" href="#">Download File</a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const endofdayFilePreviewModalElement = document.getElementById("endofdayFilePreviewModal");
+  const endofdayFilePreviewFrame = document.getElementById("endofdayFilePreviewFrame");
+  const endofdayFilePreviewUnavailable = document.getElementById("endofdayFilePreviewUnavailable");
+  const endofdayFilePreviewTitle = document.getElementById("endofdayFilePreviewTitle");
+  const endofdayFilePreviewDownload = document.getElementById("endofdayFilePreviewDownload");
+
+  document.querySelectorAll(".endofday-file-preview-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const canPreview = button.dataset.previewable === "1";
+      endofdayFilePreviewTitle.textContent = button.dataset.fileLabel || "Day End File Preview";
+      endofdayFilePreviewDownload.href = button.dataset.downloadUrl;
+      endofdayFilePreviewFrame.classList.toggle("d-none", !canPreview);
+      endofdayFilePreviewUnavailable.classList.toggle("d-none", canPreview);
+      endofdayFilePreviewFrame.src = canPreview ? button.dataset.previewUrl : "";
+      bootstrap.Modal.getOrCreateInstance(endofdayFilePreviewModalElement).show();
+    });
+  });
+
+  endofdayFilePreviewModalElement.addEventListener("hidden.bs.modal", () => {
+    endofdayFilePreviewFrame.src = "";
+    endofdayFilePreviewFrame.classList.remove("d-none");
+    endofdayFilePreviewUnavailable.classList.add("d-none");
+    endofdayFilePreviewDownload.removeAttribute("href");
+  });
+</script>
 {% endblock %}

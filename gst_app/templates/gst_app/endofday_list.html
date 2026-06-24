@@ -16,11 +16,69 @@
   {{ form.start_date|add_class:"form-control" }}
   {{ form.end_date|add_class:"form-control" }}
   <button class="btn btn-outline-secondary">Filter</button>
-  <a class="btn btn-outline-secondary" href="{% url 'endofday_export' 'pdf' %}?{{ request.GET.urlencode }}">PDF</a>
-  <a class="btn btn-outline-secondary" href="{% url 'endofday_export' 'xlsx' %}?{{ request.GET.urlencode }}">Excel</a>
-  <a class="btn btn-outline-secondary" href="{% url 'endofday_export' 'csv' %}?{{ request.GET.urlencode }}">CSV</a>
+  <button class="btn btn-outline-secondary endofday-export-preview-button" type="button" data-preview-kind="pdf" data-preview-url="{% url 'endofday_export' 'pdf' %}?{{ request.GET.urlencode }}" data-download-url="{% url 'endofday_export' 'pdf' %}?{{ request.GET.urlencode }}&download=1" data-export-label="End of Day PDF Report">PDF</button>
+  <button class="btn btn-outline-secondary endofday-export-preview-button" type="button" data-preview-kind="table" data-download-url="{% url 'endofday_export' 'xlsx' %}?{{ request.GET.urlencode }}" data-export-label="End of Day Excel Report">Excel</button>
+  <button class="btn btn-outline-secondary endofday-export-preview-button" type="button" data-preview-kind="table" data-download-url="{% url 'endofday_export' 'csv' %}?{{ request.GET.urlencode }}" data-export-label="End of Day CSV Report">CSV</button>
 </form>
 {% include "gst_app/partials/endofday_table.html" with records=records %}
+
+<div class="modal fade" id="endofdayExportPreviewModal" tabindex="-1" aria-labelledby="endofdayExportPreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="endofdayExportPreviewTitle">End of Day Report Preview</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body pdf-preview-body">
+        <iframe class="d-none" id="endofdayExportPreviewFrame" title="End of Day report PDF preview"></iframe>
+        <div class="report-preview-table" id="endofdayExportPreviewTable">
+          <table class="table align-middle">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Site Name</th>
+                <th>Entered By</th>
+                <th class="text-end">Cash</th>
+                <th class="text-end">Vault Drop / Cash Drop</th>
+                <th class="text-end">Terminal Total</th>
+                <th class="text-end">E85</th>
+                <th class="text-end">U91</th>
+                <th class="text-end">U95</th>
+                <th class="text-end">U98</th>
+                <th class="text-end">Diesel</th>
+                <th class="text-end">Net Shop Sales</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for record in records %}
+                <tr>
+                  <td>{{ record.date }}</td>
+                  <td>{{ record.site_name|default:"-" }}</td>
+                  <td>{{ record.entered_by }}</td>
+                  <td class="text-end">{{ record.cash|currency }}</td>
+                  <td class="text-end">{{ record.vault_drop|currency }}</td>
+                  <td class="text-end">{{ record.total_sales_with_payments|currency }}</td>
+                  <td class="text-end">{{ record.fuel_dip_e85|floatformat:2 }}</td>
+                  <td class="text-end">{{ record.fuel_dip_unleaded_91|floatformat:2 }}</td>
+                  <td class="text-end">{{ record.fuel_dip_unleaded_95|floatformat:2 }}</td>
+                  <td class="text-end">{{ record.fuel_dip_unleaded_98|floatformat:2 }}</td>
+                  <td class="text-end">{{ record.fuel_dip_diesel|floatformat:2 }}</td>
+                  <td class="text-end">{{ record.net_shop_sales|currency }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="12">No End of Day records found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-success" id="endofdayExportPreviewDownload" href="#">Download</a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="modal fade" id="endofdayPreviewModal" tabindex="-1" aria-labelledby="endofdayPreviewTitle" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered">
@@ -45,6 +103,24 @@
   const endofdayPreviewFrame = document.getElementById("endofdayPreviewFrame");
   const endofdayPreviewTitle = document.getElementById("endofdayPreviewTitle");
   const endofdayPreviewDownload = document.getElementById("endofdayPreviewDownload");
+  const endofdayExportPreviewModalElement = document.getElementById("endofdayExportPreviewModal");
+  const endofdayExportPreviewFrame = document.getElementById("endofdayExportPreviewFrame");
+  const endofdayExportPreviewTable = document.getElementById("endofdayExportPreviewTable");
+  const endofdayExportPreviewTitle = document.getElementById("endofdayExportPreviewTitle");
+  const endofdayExportPreviewDownload = document.getElementById("endofdayExportPreviewDownload");
+
+  document.querySelectorAll(".endofday-export-preview-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const isPdf = button.dataset.previewKind === "pdf";
+      endofdayExportPreviewTitle.textContent = button.dataset.exportLabel || "End of Day Report Preview";
+      endofdayExportPreviewDownload.href = button.dataset.downloadUrl;
+      endofdayExportPreviewDownload.textContent = `Download ${button.textContent.trim()}`;
+      endofdayExportPreviewFrame.classList.toggle("d-none", !isPdf);
+      endofdayExportPreviewTable.classList.toggle("d-none", isPdf);
+      endofdayExportPreviewFrame.src = isPdf ? button.dataset.previewUrl : "";
+      bootstrap.Modal.getOrCreateInstance(endofdayExportPreviewModalElement).show();
+    });
+  });
 
   document.querySelectorAll(".endofday-preview-button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -58,6 +134,11 @@
   endofdayPreviewModalElement.addEventListener("hidden.bs.modal", () => {
     endofdayPreviewFrame.src = "";
     endofdayPreviewDownload.removeAttribute("href");
+  });
+
+  endofdayExportPreviewModalElement.addEventListener("hidden.bs.modal", () => {
+    endofdayExportPreviewFrame.src = "";
+    endofdayExportPreviewDownload.removeAttribute("href");
   });
 </script>
 {% endblock %}

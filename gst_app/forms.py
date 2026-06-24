@@ -7,24 +7,35 @@ from .models import EndOfDay, Invoice, Supplier
 
 
 END_OF_DAY_MONEY_FIELDS = [
-    "uber_eats",
-    "doordash",
+    "cash",
     "eftpos",
     "amex_card",
+    "fleet_card",
     "motorpass",
     "motorcharge",
-    "fleet_card",
-    "diners_card",
     "united_card",
-    "store_value_charge",
     "iou",
     "drive_offs",
-    "cash",
     "vault_drop",
+    "uber_eats",
+    "doordash",
+    "diners_card",
+    "store_value_charge",
+    "iou_payment",
+    "drive_off_payment",
     "total_sales",
+    "total_fuel_sales",
     "gross_shop_sales",
     "ezy_pin",
     "less_surcharge",
+]
+
+END_OF_DAY_FUEL_DIP_FIELDS = [
+    "fuel_dip_e85",
+    "fuel_dip_unleaded_91",
+    "fuel_dip_unleaded_95",
+    "fuel_dip_unleaded_98",
+    "fuel_dip_diesel",
 ]
 
 
@@ -101,10 +112,20 @@ class InvoiceForm(forms.ModelForm):
 
 class EndOfDayForm(forms.ModelForm):
     money_fields = END_OF_DAY_MONEY_FIELDS
+    fuel_dip_fields = END_OF_DAY_FUEL_DIP_FIELDS
 
     class Meta:
         model = EndOfDay
-        fields = ("date", "site_name", "entered_by", *END_OF_DAY_MONEY_FIELDS, "note")
+        fields = (
+            "date",
+            "site_name",
+            "entered_by",
+            *END_OF_DAY_MONEY_FIELDS,
+            *END_OF_DAY_FUEL_DIP_FIELDS,
+            "master_sheet_file",
+            "end_of_days_file",
+            "note",
+        )
         widgets = {
             "date": DateInput(),
             "note": forms.Textarea(attrs={"rows": 3}),
@@ -119,6 +140,23 @@ class EndOfDayForm(forms.ModelForm):
         for field in self.money_fields:
             self.fields[field].required = False
             self.fields[field].widget.attrs.update({"step": "0.01", "min": "0"})
+        for field in self.fuel_dip_fields:
+            self.fields[field].required = True
+            self.fields[field].widget.attrs.update({"step": "0.01", "min": "0"})
+        self.fields["vault_drop"].label = "Vault Drop / Cash Drop"
+        self.fields["total_sales"].label = "Terminal Total"
+        self.fields["fuel_dip_e85"].label = "Fuel Dip - E85"
+        self.fields["fuel_dip_unleaded_91"].label = "Fuel Dip - Unleaded 91"
+        self.fields["fuel_dip_unleaded_95"].label = "Fuel Dip - Unleaded 95"
+        self.fields["fuel_dip_unleaded_98"].label = "Fuel Dip - Unleaded 98"
+        self.fields["fuel_dip_diesel"].label = "Fuel Dip - Diesel"
+        self.fields["master_sheet_file"].label = "Master Sheet"
+        self.fields["end_of_days_file"].label = "End Of Days"
+        for field in ("master_sheet_file", "end_of_days_file"):
+            self.fields[field].required = not bool(self.instance.pk and getattr(self.instance, field))
+            self.fields[field].help_text = "Upload a PDF, image, Word, or Excel file. Multi-page PDFs are supported."
+            self.fields[field].widget.attrs.update({"accept": ".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx"})
+        self.fields["gross_shop_sales"].widget.attrs.update({"readonly": "readonly"})
         self.fields["ezy_pin"].required = True
         self.fields["less_surcharge"].required = True
 
@@ -131,6 +169,9 @@ class EndOfDayForm(forms.ModelForm):
         for field in self.money_fields:
             if cleaned.get(field) in (None, ""):
                 cleaned[field] = 0
+        for field in self.fuel_dip_fields:
+            if cleaned.get(field) in (None, ""):
+                self.add_error(field, f"{self.fields[field].label} is required. Enter 0 if there is no reading.")
 
         date = cleaned.get("date")
         today = timezone.localdate()

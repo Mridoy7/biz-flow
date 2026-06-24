@@ -1,16 +1,29 @@
 from datetime import date
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
+import tempfile
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.test import TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.utils import timezone
+from pypdf import PdfReader
+from reportlab.pdfgen import canvas
 
 from .forms import EndOfDayForm, InvoiceForm
 from .models import AccountRole, EndOfDay, Invoice, Supplier
-from .pdf import endofday_daysheet_rows
+from .pdf import endofday_daysheet_rows, endofday_fuel_dip_rows
+
+
+def sample_pdf_bytes(text="Uploaded page"):
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer)
+    pdf.drawString(72, 720, text)
+    pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
 
 
 class EndOfDayCalculationTests(TestCase):
@@ -37,6 +50,7 @@ class EndOfDayCalculationTests(TestCase):
             "cash": 100,
             "vault_drop": 20,
             "total_sales": 370,
+            "total_fuel_sales": 0,
             "gross_shop_sales": 370,
             "ezy_pin": 20,
             "less_surcharge": 5,
@@ -53,11 +67,20 @@ class EndOfDayCalculationTests(TestCase):
         self.assertEqual(record.difference, Decimal("10"))
         self.assertEqual(record.net_shop_sales, Decimal("345"))
 
-    def test_net_shop_sales_uses_gross_shop_sales(self):
-        record = self.make_record(total_sales=500, gross_shop_sales=370, ezy_pin=20, less_surcharge=5, note="Explained")
+    def test_iou_and_drive_off_payments_add_to_total_sales_reconciliation(self):
+        record = self.make_record(iou_payment=7, drive_off_payment=3, note="Explained")
+        record.full_clean()
+
+        self.assertEqual(record.total_value, Decimal("390"))
+        self.assertEqual(record.total_sales_with_payments, Decimal("380"))
+        self.assertEqual(record.difference, Decimal("10"))
+
+    def test_gross_shop_sales_uses_total_sales_less_fuel_sales(self):
+        record = self.make_record(total_sales=500, total_fuel_sales=130, ezy_pin=20, less_surcharge=5, note="Explained")
         record.full_clean()
 
         self.assertEqual(record.difference, Decimal("-120"))
+        self.assertEqual(record.gross_shop_sales, Decimal("370"))
         self.assertEqual(record.net_shop_sales, Decimal("345"))
 
     def test_note_required_when_difference_over_five(self):
@@ -77,6 +100,31 @@ class SameDayFormValidationTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="owner", password="test-pass")
         self.supplier = Supplier.objects.create(user=self.user, name="Fuel Supplier")
+
+    def endofday_required_data(self, **overrides):
+        data = {
+            "date": timezone.localdate().isoformat(),
+            "site_name": "Holtze",
+            "entered_by": "Ridoy",
+            "total_sales": "0",
+            "total_fuel_sales": "0",
+            "gross_shop_sales": "0",
+            "ezy_pin": "0",
+            "less_surcharge": "0",
+            "fuel_dip_e85": "0",
+            "fuel_dip_unleaded_91": "0",
+            "fuel_dip_unleaded_95": "0",
+            "fuel_dip_unleaded_98": "0",
+            "fuel_dip_diesel": "0",
+        }
+        data.update(overrides)
+        return data
+
+    def endofday_required_files(self):
+        return {
+            "master_sheet_file": SimpleUploadedFile("master-sheet.pdf", b"%PDF-1.4\nmaster", content_type="application/pdf"),
+            "end_of_days_file": SimpleUploadedFile("end-of-days.pdf", b"%PDF-1.4\ndays", content_type="application/pdf"),
+        }
 
     def test_invoice_form_rejects_previous_day(self):
         yesterday = timezone.localdate() - timedelta(days=1)
@@ -124,13 +172,8 @@ class SameDayFormValidationTests(TestCase):
     def test_endofday_form_rejects_previous_day(self):
         yesterday = timezone.localdate() - timedelta(days=1)
         form = EndOfDayForm(
-            data={
-                "date": yesterday.isoformat(),
-                "site_name": "Holtze",
-                "entered_by": "Ridoy",
-                "ezy_pin": "0",
-                "less_surcharge": "0",
-            },
+            data=self.endofday_required_data(date=yesterday.isoformat()),
+            files=self.endofday_required_files(),
             user=self.user,
         )
 
@@ -138,22 +181,48 @@ class SameDayFormValidationTests(TestCase):
         self.assertIn("End of Day date must be today's date.", form.errors["date"])
 
     def test_endofday_form_accepts_site_name(self):
-        today = timezone.localdate()
         form = EndOfDayForm(
-            data={
-                "date": today.isoformat(),
-                "site_name": "Holtze",
-                "entered_by": "Ridoy",
-                "total_sales": "0",
-                "gross_shop_sales": "0",
-                "ezy_pin": "0",
-                "less_surcharge": "0",
-            },
+            data=self.endofday_required_data(),
+            files=self.endofday_required_files(),
             user=self.user,
         )
 
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data["site_name"], "Holtze")
+
+    def test_endofday_form_prioritizes_common_payment_fields(self):
+        form = EndOfDayForm(user=self.user)
+        field_names = list(form.fields)
+
+        self.assertEqual(
+            field_names[3:12],
+            ["cash", "eftpos", "amex_card", "fleet_card", "motorpass", "motorcharge", "united_card", "iou", "drive_offs"],
+        )
+        self.assertEqual(field_names[12], "vault_drop")
+        self.assertEqual(form.fields["vault_drop"].label, "Vault Drop / Cash Drop")
+
+    def test_endofday_form_includes_fuel_dip_fields(self):
+        form = EndOfDayForm(user=self.user)
+
+        self.assertEqual(form.fields["total_sales"].label, "Terminal Total")
+        self.assertEqual(form.fields["fuel_dip_e85"].label, "Fuel Dip - E85")
+        self.assertEqual(form.fields["fuel_dip_unleaded_91"].label, "Fuel Dip - Unleaded 91")
+        self.assertEqual(form.fields["fuel_dip_unleaded_95"].label, "Fuel Dip - Unleaded 95")
+        self.assertEqual(form.fields["fuel_dip_unleaded_98"].label, "Fuel Dip - Unleaded 98")
+        self.assertEqual(form.fields["fuel_dip_diesel"].label, "Fuel Dip - Diesel")
+        self.assertTrue(form.fields["fuel_dip_e85"].required)
+        self.assertTrue(form.fields["master_sheet_file"].required)
+        self.assertTrue(form.fields["end_of_days_file"].required)
+
+    def test_endofday_form_requires_fuel_dips_and_day_sheet_uploads(self):
+        data = self.endofday_required_data()
+        data.pop("fuel_dip_e85")
+        form = EndOfDayForm(data=data, user=self.user)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("fuel_dip_e85", form.errors)
+        self.assertIn("master_sheet_file", form.errors)
+        self.assertIn("end_of_days_file", form.errors)
 
 
 class InvoiceFileDownloadTests(TestCase):
@@ -195,6 +264,155 @@ class InvoiceFileDownloadTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("inline", response["Content-Disposition"])
 
+    def test_invoice_list_file_action_previews_before_download(self):
+        upload = SimpleUploadedFile("invoice.pdf", b"invoice", content_type="application/pdf")
+        Invoice.objects.create(
+            user=self.user,
+            supplier=self.supplier,
+            invoice_date=timezone.localdate(),
+            invoice_number="INV-PREVIEW-BUTTON",
+            invoice_file=upload,
+            entered_by="Ridoy",
+        )
+        self.client.login(username="owner", password="test-pass")
+
+        response = self.client.get("/invoices/")
+
+        self.assertContains(response, "invoice-preview-button")
+        self.assertContains(response, "Original invoice")
+        self.assertContains(response, "data-preview-url=")
+        self.assertContains(response, "data-download-url=")
+        self.assertContains(response, "invoiceExportPreviewModal")
+        self.assertContains(response, "data-export-label=\"Invoice PDF Report\"")
+        self.assertContains(response, "data-export-label=\"Invoice Excel Report\"")
+        self.assertContains(response, "data-export-label=\"Invoice CSV Report\"")
+
+    def test_non_previewable_invoice_file_does_not_load_in_preview_frame(self):
+        upload = SimpleUploadedFile(
+            "invoice.docx",
+            b"invoice",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        Invoice.objects.create(
+            user=self.user,
+            supplier=self.supplier,
+            invoice_date=timezone.localdate(),
+            invoice_number="INV-DOCX",
+            invoice_file=upload,
+            entered_by="Ridoy",
+        )
+        self.client.login(username="owner", password="test-pass")
+
+        response = self.client.get("/invoices/")
+
+        self.assertContains(response, 'data-previewable="0"')
+        self.assertContains(response, "Preview not available for this file type.")
+
+
+class EndOfDayFileUploadTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="owner", password="test-pass")
+        self.temp_media = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_media.cleanup)
+        self.client.login(username="owner", password="test-pass")
+
+    def test_endofday_form_can_upload_master_sheet_and_end_of_days_files(self):
+        master_sheet = SimpleUploadedFile("master-sheet.pdf", b"%PDF-1.4\nmaster", content_type="application/pdf")
+        end_of_days = SimpleUploadedFile(
+            "end-of-days.docx",
+            b"end-of-days",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+
+        with override_settings(MEDIA_ROOT=self.temp_media.name):
+            response = self.client.post(
+                "/end-of-day/add/",
+                {
+                    "date": timezone.localdate().isoformat(),
+                    "site_name": "Holtze",
+                    "entered_by": "Ridoy",
+                    "total_sales": "0",
+                    "total_fuel_sales": "0",
+                    "gross_shop_sales": "0",
+                    "ezy_pin": "0",
+                    "less_surcharge": "0",
+                    "fuel_dip_e85": "0",
+                    "fuel_dip_unleaded_91": "0",
+                    "fuel_dip_unleaded_95": "0",
+                    "fuel_dip_unleaded_98": "0",
+                    "fuel_dip_diesel": "0",
+                    "master_sheet_file": master_sheet,
+                    "end_of_days_file": end_of_days,
+                },
+            )
+
+            self.assertEqual(response.status_code, 302)
+            record = EndOfDay.objects.get(user=self.user, date=timezone.localdate())
+            self.assertTrue(record.master_sheet_file.name.endswith(".pdf"))
+            self.assertTrue(record.end_of_days_file.name.endswith(".docx"))
+
+    def test_endofday_detail_previews_uploaded_files_before_download(self):
+        with override_settings(MEDIA_ROOT=self.temp_media.name):
+            record = EndOfDay.objects.create(
+                user=self.user,
+                date=timezone.localdate(),
+                entered_by="Ridoy",
+                total_sales=0,
+                ezy_pin=0,
+                less_surcharge=0,
+                master_sheet_file=SimpleUploadedFile("master-sheet.pdf", b"%PDF-1.4\nmaster", content_type="application/pdf"),
+                end_of_days_file=SimpleUploadedFile(
+                    "end-of-days.docx",
+                    b"end-of-days",
+                    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
+            )
+
+            detail_response = self.client.get(f"/end-of-day/{record.pk}/")
+            preview_response = self.client.get(f"/end-of-day/{record.pk}/file/master-sheet/preview/")
+            download_response = self.client.get(f"/end-of-day/{record.pk}/file/master-sheet/")
+
+        self.assertContains(detail_response, "Uploaded daysheets")
+        self.assertContains(detail_response, "Master Sheet")
+        self.assertContains(detail_response, "End Of Days")
+        self.assertContains(detail_response, 'data-previewable="1"')
+        self.assertContains(detail_response, 'data-previewable="0"')
+        self.assertContains(detail_response, "Preview not available for this file type.")
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertIn("inline", preview_response["Content-Disposition"])
+        self.assertEqual(download_response.status_code, 200)
+        self.assertIn("attachment", download_response["Content-Disposition"])
+
+    def test_endofday_form_has_file_upload_controls(self):
+        response = self.client.get("/end-of-day/add/")
+
+        self.assertContains(response, 'enctype="multipart/form-data"')
+        self.assertContains(response, "Master Sheet")
+        self.assertContains(response, "End Of Days")
+        self.assertContains(response, "No file uploaded yet")
+        self.assertContains(response, "Upload file")
+        self.assertContains(response, "upload-card")
+        self.assertContains(response, ".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx")
+
+    def test_endofday_edit_form_shows_current_uploads_can_be_changed(self):
+        with override_settings(MEDIA_ROOT=self.temp_media.name):
+            record = EndOfDay.objects.create(
+                user=self.user,
+                date=timezone.localdate(),
+                entered_by="Ridoy",
+                total_sales=0,
+                ezy_pin=0,
+                less_surcharge=0,
+                master_sheet_file=SimpleUploadedFile("master-sheet.pdf", b"%PDF-1.4\nmaster", content_type="application/pdf"),
+                end_of_days_file=SimpleUploadedFile("end-of-days.pdf", b"%PDF-1.4\ndays", content_type="application/pdf"),
+            )
+
+            response = self.client.get(f"/end-of-day/{record.pk}/edit/")
+
+        self.assertContains(response, "Current file: master-sheet")
+        self.assertContains(response, "Current file: end-of-days")
+        self.assertContains(response, "Change file", count=2)
+
 
 class PdfContentTests(TestCase):
     def setUp(self):
@@ -235,6 +453,98 @@ class PdfContentTests(TestCase):
         self.assertEqual(rows[0][0], "Date")
         self.assertNotEqual(rows[0], ("", ""))
 
+    def test_endofday_daysheet_includes_store_value_and_payment_rows(self):
+        record = EndOfDay.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            entered_by="Ridoy",
+            store_value_charge=12,
+            iou_payment=7,
+            drive_off_payment=3,
+            total_sales=100,
+            total_fuel_sales=20,
+            ezy_pin=0,
+            less_surcharge=0,
+        )
+
+        rows = dict(endofday_daysheet_rows(record))
+
+        self.assertEqual(rows["Store Value Charge"], Decimal("12"))
+        self.assertEqual(rows["IOU Payment"], Decimal("7"))
+        self.assertEqual(rows["Drive Off Payment"], Decimal("3"))
+        self.assertEqual(rows["Total sales"], Decimal("22"))
+        self.assertEqual(rows["Terminal Total"], Decimal("110"))
+        self.assertEqual(rows["Total Fuel Sales"], Decimal("20"))
+        self.assertEqual(rows["Gross Shopsales"], Decimal("90"))
+
+    def test_endofday_fuel_dip_rows_are_separate_from_main_daysheet_rows(self):
+        record = EndOfDay.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            entered_by="Ridoy",
+            fuel_dip_e85=100,
+            fuel_dip_unleaded_91=200,
+            fuel_dip_unleaded_95=300,
+            fuel_dip_unleaded_98=400,
+            fuel_dip_diesel=500,
+            total_sales=0,
+            ezy_pin=0,
+            less_surcharge=0,
+        )
+
+        daysheet_rows = dict(endofday_daysheet_rows(record))
+        fuel_dip_rows = dict(endofday_fuel_dip_rows(record))
+
+        self.assertNotIn("Fuel Dip - E85", daysheet_rows)
+        self.assertEqual(fuel_dip_rows["Fuel Dip - E85"], Decimal("100"))
+        self.assertEqual(fuel_dip_rows["Fuel Dip - Unleaded 91"], Decimal("200"))
+        self.assertEqual(fuel_dip_rows["Fuel Dip - Unleaded 95"], Decimal("300"))
+        self.assertEqual(fuel_dip_rows["Fuel Dip - Unleaded 98"], Decimal("400"))
+        self.assertEqual(fuel_dip_rows["Fuel Dip - Diesel"], Decimal("500"))
+
+    def test_endofday_detail_includes_store_value_and_payment_lines(self):
+        record = EndOfDay.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            entered_by="Ridoy",
+            store_value_charge=12,
+            iou_payment=7,
+            drive_off_payment=3,
+            total_sales=100,
+            total_fuel_sales=20,
+            ezy_pin=0,
+            less_surcharge=0,
+        )
+
+        response = self.client.get(f"/end-of-day/{record.pk}/")
+
+        self.assertContains(response, "Store Value Charge")
+        self.assertContains(response, "IOU Payment")
+        self.assertContains(response, "Drive Off Payment")
+        self.assertContains(response, "Total Fuel Sales")
+
+    def test_endofday_detail_includes_fuel_dip_section(self):
+        record = EndOfDay.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            entered_by="Ridoy",
+            fuel_dip_e85=100,
+            fuel_dip_unleaded_91=200,
+            fuel_dip_unleaded_95=300,
+            fuel_dip_unleaded_98=400,
+            fuel_dip_diesel=500,
+            total_sales=0,
+            ezy_pin=0,
+            less_surcharge=0,
+        )
+
+        response = self.client.get(f"/end-of-day/{record.pk}/")
+
+        self.assertContains(response, "Fuel Dips")
+        self.assertContains(response, "E85")
+        self.assertContains(response, "Unleaded 91")
+        self.assertContains(response, "Diesel")
+
     def test_endofday_pdf_can_download_after_preview(self):
         record = EndOfDay.objects.create(
             user=self.user,
@@ -251,6 +561,33 @@ class PdfContentTests(TestCase):
         self.assertIn("inline", preview_response["Content-Disposition"])
         self.assertIn("attachment", download_response["Content-Disposition"])
 
+    def test_endofday_pdf_adds_fuel_dips_page_and_uploaded_daysheet_pages(self):
+        with tempfile.TemporaryDirectory() as temp_media, override_settings(MEDIA_ROOT=temp_media):
+            record = EndOfDay.objects.create(
+                user=self.user,
+                date=timezone.localdate(),
+                entered_by="Ridoy",
+                fuel_dip_e85=100,
+                fuel_dip_unleaded_91=200,
+                fuel_dip_unleaded_95=300,
+                fuel_dip_unleaded_98=400,
+                fuel_dip_diesel=500,
+                total_sales=0,
+                ezy_pin=0,
+                less_surcharge=0,
+                master_sheet_file=SimpleUploadedFile("master-sheet.pdf", sample_pdf_bytes("Master Sheet"), content_type="application/pdf"),
+                end_of_days_file=SimpleUploadedFile("end-of-days.pdf", sample_pdf_bytes("End Of Days"), content_type="application/pdf"),
+            )
+
+            response = self.client.get(f"/end-of-day/{record.pk}/pdf/")
+        reader = PdfReader(BytesIO(response.content))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+
+        self.assertEqual(len(reader.pages), 4)
+        self.assertIn("Fuel Dips", text)
+        self.assertIn("Master Sheet", text)
+        self.assertIn("End Of Days", text)
+
     def test_endofday_list_uses_pdf_preview_modal(self):
         EndOfDay.objects.create(
             user=self.user,
@@ -266,6 +603,24 @@ class PdfContentTests(TestCase):
         self.assertContains(response, "Preview PDF")
         self.assertContains(response, "endofdayPreviewModal")
         self.assertContains(response, "?download=1")
+
+    def test_endofday_export_buttons_preview_before_download(self):
+        EndOfDay.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            entered_by="Ridoy",
+            total_sales=0,
+            ezy_pin=0,
+            less_surcharge=0,
+        )
+
+        response = self.client.get("/end-of-day/")
+
+        self.assertContains(response, "endofdayExportPreviewModal")
+        self.assertContains(response, "data-export-label=\"End of Day PDF Report\"")
+        self.assertContains(response, "data-export-label=\"End of Day Excel Report\"")
+        self.assertContains(response, "data-export-label=\"End of Day CSV Report\"")
+        self.assertContains(response, "Vault Drop / Cash Drop")
 
     def test_generated_invoice_pdf_is_inline_preview(self):
         upload = SimpleUploadedFile("invoice.pdf", b"invoice", content_type="application/pdf")
@@ -342,9 +697,19 @@ class EndOfDayArchiveTests(TestCase):
                 "date": timezone.localdate().isoformat(),
                 "entered_by": "New Staff",
                 "total_sales": "0",
+                "total_fuel_sales": "0",
                 "gross_shop_sales": "0",
                 "ezy_pin": "0",
                 "less_surcharge": "0",
+                "fuel_dip_e85": "0",
+                "fuel_dip_unleaded_91": "0",
+                "fuel_dip_unleaded_95": "0",
+                "fuel_dip_unleaded_98": "0",
+                "fuel_dip_diesel": "0",
+            },
+            files={
+                "master_sheet_file": SimpleUploadedFile("master-sheet.pdf", b"%PDF-1.4\nmaster", content_type="application/pdf"),
+                "end_of_days_file": SimpleUploadedFile("end-of-days.pdf", b"%PDF-1.4\ndays", content_type="application/pdf"),
             },
             user=self.user,
         )
@@ -363,6 +728,8 @@ class EndOfDayReportExportTests(TestCase):
             date=timezone.localdate(),
             site_name="Holtze",
             entered_by="Ridoy",
+            cash=25,
+            vault_drop=15,
             total_sales=0,
             ezy_pin=0,
             less_surcharge=0,
@@ -372,6 +739,28 @@ class EndOfDayReportExportTests(TestCase):
 
         self.assertContains(response, "Date,Site Name,Entered By")
         self.assertContains(response, "Holtze")
+        self.assertContains(response, "Cash,Vault Drop / Cash Drop")
+        self.assertContains(response, "$25.00,$15.00")
+
+    def test_csv_report_includes_fuel_dips(self):
+        EndOfDay.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            entered_by="Ridoy",
+            fuel_dip_e85=100,
+            fuel_dip_unleaded_91=200,
+            fuel_dip_unleaded_95=300,
+            fuel_dip_unleaded_98=400,
+            fuel_dip_diesel=500,
+            total_sales=0,
+            ezy_pin=0,
+            less_surcharge=0,
+        )
+
+        response = self.client.get("/end-of-day/export/csv/")
+
+        self.assertContains(response, "Fuel Dip - E85,Fuel Dip - Unleaded 91,Fuel Dip - Unleaded 95")
+        self.assertContains(response, "100.00,200.00,300.00,400.00,500.00")
 
 
 class AccountRoleAccessTests(TestCase):

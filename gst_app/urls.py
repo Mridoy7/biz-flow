@@ -23,6 +23,8 @@ urlpatterns = [
     path("end-of-day/<int:pk>/", views.endofday_detail, name="endofday_detail"),
     path("end-of-day/<int:pk>/edit/", views.endofday_form, name="endofday_edit"),
     path("end-of-day/<int:pk>/pdf/", views.endofday_pdf_view, name="endofday_pdf"),
+    path("end-of-day/<int:pk>/file/<str:file_kind>/", views.endofday_file_download, name="endofday_file_download"),
+    path("end-of-day/<int:pk>/file/<str:file_kind>/preview/", views.endofday_file_preview, name="endofday_file_preview"),
     path("end-of-day/<int:pk>/archive/", views.endofday_archive, name="endofday_archive"),
     path("end-of-day/export/<str:filetype>/", views.endofday_export, name="endofday_export"),
 ]

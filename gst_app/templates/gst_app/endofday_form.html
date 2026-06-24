@@ -7,7 +7,7 @@
     <h1 class="h4 mb-0">End of Day</h1>
     <a class="btn btn-outline-secondary btn-sm" href="{{ cancel_url }}">Back</a>
   </div>
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ cancel_url }}">
     {{ form.non_field_errors }}
@@ -17,12 +17,16 @@
         <strong id="summary-adjusted-united-card">$0.00</strong>
       </div>
       <div>
-        <span>Total Value</span>
+        <span>Total sales</span>
         <strong id="summary-total-value">$0.00</strong>
       </div>
       <div id="summary-difference-card">
         <span>Difference</span>
         <strong id="summary-difference">$0.00</strong>
+      </div>
+      <div>
+        <span>Total Fuel Sales</span>
+        <strong id="summary-total-fuel-sales">$0.00</strong>
       </div>
       <div>
         <span>Gross Shop Sales</span>
@@ -38,10 +42,33 @@
     </p>
     <div class="form-grid">
       {% for field in form %}
-        <div class="{% if field.name == 'note' %}span-2{% endif %}">
-          <label class="form-label">{{ field.label }}</label>
-          {{ field|add_class:"form-control" }}
-          {{ field.errors }}
+        <div class="{% if field.name == 'note' or field|is_file_field %}span-2{% endif %}">
+          {% if field|is_file_field %}
+            <div class="upload-card" data-upload-card>
+              <div>
+                <label class="form-label mb-1" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-marker">*</span>{% endif %}</label>
+                <div class="upload-current" data-upload-status>
+                  {% if field.value %}
+                    Current file: {{ field.value|basename }}
+                  {% else %}
+                    No file uploaded yet
+                  {% endif %}
+                </div>
+                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+              </div>
+              <div class="upload-actions">
+                <label class="btn btn-outline-primary btn-sm mb-0" for="{{ field.id_for_label }}">
+                  {% if field.value %}Change file{% else %}Upload file{% endif %}
+                </label>
+                {{ field|add_class:"upload-input" }}
+              </div>
+              {{ field.errors }}
+            </div>
+          {% else %}
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-marker">*</span>{% endif %}</label>
+            {{ field|add_class:"form-control" }}
+            {{ field.errors }}
+          {% endif %}
         </div>
       {% endfor %}
     </div>
@@ -53,24 +80,32 @@
 </section>
 <script>
   const moneyFields = [
-    "uber_eats",
-    "doordash",
+    "cash",
     "eftpos",
     "amex_card",
+    "fleet_card",
     "motorpass",
     "motorcharge",
-    "fleet_card",
-    "diners_card",
     "united_card",
-    "store_value_charge",
     "iou",
     "drive_offs",
-    "cash",
     "vault_drop",
+    "uber_eats",
+    "doordash",
+    "diners_card",
+    "store_value_charge",
+    "iou_payment",
+    "drive_off_payment",
     "total_sales",
+    "total_fuel_sales",
     "gross_shop_sales",
     "ezy_pin",
-    "less_surcharge"
+    "less_surcharge",
+    "fuel_dip_e85",
+    "fuel_dip_unleaded_91",
+    "fuel_dip_unleaded_95",
+    "fuel_dip_unleaded_98",
+    "fuel_dip_diesel"
   ];
   const totalSalesInput = document.getElementById("id_total_sales");
   let totalSalesEntered = Boolean(totalSalesInput && !["", "0", "0.0", "0.00"].includes(totalSalesInput.value.trim()));
@@ -105,14 +140,23 @@
       + adjustedUnitedCard
       + fieldValue("iou")
       + fieldValue("drive_offs")
+      + fieldValue("iou_payment")
+      + fieldValue("drive_off_payment")
       + fieldValue("cash")
       + fieldValue("vault_drop");
-    const difference = totalValue - fieldValue("total_sales");
-    const grossShopSales = fieldValue("gross_shop_sales");
+    const totalSalesWithPayments = fieldValue("total_sales") + fieldValue("iou_payment") + fieldValue("drive_off_payment");
+    const difference = totalValue - totalSalesWithPayments;
+    const totalFuelSales = fieldValue("total_fuel_sales");
+    const grossShopSales = totalSalesWithPayments - totalFuelSales;
     const netShopSales = grossShopSales - fieldValue("ezy_pin") - fieldValue("less_surcharge");
+    const grossShopInput = document.getElementById("id_gross_shop_sales");
+    if (grossShopInput) {
+      grossShopInput.value = grossShopSales.toFixed(2);
+    }
 
     setSummary("summary-adjusted-united-card", adjustedUnitedCard);
     setSummary("summary-total-value", totalValue);
+    setSummary("summary-total-fuel-sales", totalFuelSales);
     setSummary("summary-gross-shop-sales", grossShopSales);
     setSummary("summary-difference", difference);
     setSummary("summary-net-shop-sales", netShopSales);
@@ -128,6 +172,9 @@
     const input = document.getElementById(`id_${name}`);
     if (input) {
       input.addEventListener("focus", () => {
+        if (input.hasAttribute("readonly")) {
+          return;
+        }
         if (["0", "0.0", "0.00"].includes(input.value.trim())) {
           input.value = "";
         } else {
@@ -159,6 +206,17 @@
   if (noteInput) {
     noteInput.addEventListener("input", updateSummary);
   }
+
+  document.querySelectorAll("[data-upload-card]").forEach((card) => {
+    const input = card.querySelector("input[type='file']");
+    const status = card.querySelector("[data-upload-status]");
+    if (!input || !status) {
+      return;
+    }
+    input.addEventListener("change", () => {
+      status.textContent = input.files.length ? `Selected file: ${input.files[0].name}` : status.textContent;
+    });
+  });
 
   updateSummary();
 </script>

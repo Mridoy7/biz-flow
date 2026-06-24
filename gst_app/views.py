@@ -177,6 +177,14 @@ def invoice_file_preview(request, pk):
     return FileResponse(invoice.invoice_file.open("rb"), as_attachment=False, filename=filename, content_type=content_type)
 
 
+def endofday_uploaded_file(record, file_kind):
+    if file_kind == "master-sheet":
+        return record.master_sheet_file, "Master Sheet"
+    if file_kind == "end-of-days":
+        return record.end_of_days_file, "End Of Days"
+    raise Http404("Unknown End of Day file.")
+
+
 @login_required
 def endofday_list(request):
     form = EndOfDayReportForm(request.GET or None)
@@ -220,10 +228,17 @@ def endofday_form(request, pk=None):
     if pk:
         record = get_object_or_404(EndOfDay, pk=pk, archived_at__isnull=True)
     cancel_url = safe_next_url(request, reverse("endofday_list"))
-    audited_fields = EndOfDayForm.money_fields + ["date", "site_name", "entered_by", "note"]
+    audited_fields = EndOfDayForm.money_fields + EndOfDayForm.fuel_dip_fields + [
+        "date",
+        "site_name",
+        "entered_by",
+        "master_sheet_file",
+        "end_of_days_file",
+        "note",
+    ]
     before = snapshot_instance(record, audited_fields) if record else {}
     if request.method == "POST":
-        form = EndOfDayForm(request.POST, instance=record, user=request.user)
+        form = EndOfDayForm(request.POST, request.FILES, instance=record, user=request.user)
         if form.is_valid():
             saved = form.save(commit=False)
             if not saved.pk:
@@ -251,6 +266,27 @@ def endofday_pdf_view(request, pk):
 
 
 @login_required
+def endofday_file_download(request, pk, file_kind):
+    record = get_object_or_404(owned_or_all(EndOfDay.objects.all(), request.user), pk=pk)
+    uploaded, label = endofday_uploaded_file(record, file_kind)
+    if not uploaded:
+        raise Http404(f"No {label} file found.")
+    filename = Path(uploaded.name).name
+    return FileResponse(uploaded.open("rb"), as_attachment=True, filename=filename)
+
+
+@login_required
+def endofday_file_preview(request, pk, file_kind):
+    record = get_object_or_404(owned_or_all(EndOfDay.objects.all(), request.user), pk=pk)
+    uploaded, label = endofday_uploaded_file(record, file_kind)
+    if not uploaded:
+        raise Http404(f"No {label} file found.")
+    filename = Path(uploaded.name).name
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return FileResponse(uploaded.open("rb"), as_attachment=False, filename=filename, content_type=content_type)
+
+
+@login_required
 def endofday_archive(request, pk):
     require_dayend_manager(request.user)
     record = get_object_or_404(EndOfDay, pk=pk, archived_at__isnull=True)
@@ -266,20 +302,63 @@ def invoice_export(request, filetype):
     invoices = filter_invoices(request.user, request.GET)
     rows = [[i.supplier.name, i.invoice_date, i.invoice_number, i.entered_by, money(i.invoice_amount or 0), i.created_at] for i in invoices]
     headers = ["Supplier", "Invoice Date", "Invoice Number", "Entered By", "Amount", "Created"]
-    return export_rows(filetype, "invoice-report", headers, rows)
+    return export_rows(request, filetype, "invoice-report", headers, rows)
 
 
 @login_required
 def endofday_export(request, filetype):
     records = filter_endofday(request.user, request.GET)
-    rows = [[r.date, r.site_name or "-", r.entered_by, money(r.total_sales), money(r.total_value), money(r.difference), money(r.net_shop_sales)] for r in records]
-    headers = ["Date", "Site Name", "Entered By", "Total Sales", "Total Value", "Difference", "Net Shop Sales"]
-    return export_rows(filetype, "end-of-day-report", headers, rows)
+    rows = [
+        [
+            r.date,
+            r.site_name or "-",
+            r.entered_by,
+            money(r.cash),
+            money(r.vault_drop),
+            money(r.total_sales_with_payments),
+            money(r.total_fuel_sales),
+            f"{r.fuel_dip_e85:,.2f}",
+            f"{r.fuel_dip_unleaded_91:,.2f}",
+            f"{r.fuel_dip_unleaded_95:,.2f}",
+            f"{r.fuel_dip_unleaded_98:,.2f}",
+            f"{r.fuel_dip_diesel:,.2f}",
+            money(r.gross_shop_sales),
+            money(r.total_value),
+            money(r.difference),
+            money(r.net_shop_sales),
+        ]
+        for r in records
+    ]
+    headers = [
+        "Date",
+        "Site Name",
+        "Entered By",
+        "Cash",
+        "Vault Drop / Cash Drop",
+        "Terminal Total",
+        "Total Fuel Sales",
+        "Fuel Dip - E85",
+        "Fuel Dip - Unleaded 91",
+        "Fuel Dip - Unleaded 95",
+        "Fuel Dip - Unleaded 98",
+        "Fuel Dip - Diesel",
+        "Gross Shop Sales",
+        "Total sales",
+        "Difference",
+        "Net Shop Sales",
+    ]
+    return export_rows(request, filetype, "end-of-day-report", headers, rows)
 
 
-def export_rows(filetype, basename, headers, rows):
+def export_rows(request, filetype, basename, headers, rows):
     if filetype == "pdf":
-        return report_pdf(f"{basename}.pdf", basename.replace("-", " ").title(), headers, rows)
+        return report_pdf(
+            f"{basename}.pdf",
+            basename.replace("-", " ").title(),
+            headers,
+            rows,
+            as_attachment=request.GET.get("download") == "1",
+        )
     if filetype == "xlsx":
         workbook = Workbook()
         sheet = workbook.active

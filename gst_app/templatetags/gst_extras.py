@@ -1,4 +1,5 @@
 from django import template
+from django.forms import FileInput
 
 register = template.Library()
 
@@ -15,3 +16,15 @@ def add_class(field, css_class):
     existing = field.field.widget.attrs.get("class", "")
     classes = f"{existing} {css_class}".strip()
     return field.as_widget(attrs={"class": classes})
+
+
+@register.filter
+def is_file_field(field):
+    return isinstance(field.field.widget, FileInput)
+
+
+@register.filter
+def basename(value):
+    if not value:
+        return ""
+    return str(value).rsplit("/", 1)[-1]

@@ -12,11 +12,55 @@
   {{ form.start_date|add_class:"form-control" }}
   {{ form.end_date|add_class:"form-control" }}
   <button class="btn btn-outline-secondary">Filter</button>
-  <a class="btn btn-outline-secondary" href="{% url 'invoice_export' 'pdf' %}?{{ request.GET.urlencode }}">PDF</a>
-  <a class="btn btn-outline-secondary" href="{% url 'invoice_export' 'xlsx' %}?{{ request.GET.urlencode }}">Excel</a>
-  <a class="btn btn-outline-secondary" href="{% url 'invoice_export' 'csv' %}?{{ request.GET.urlencode }}">CSV</a>
+  <button class="btn btn-outline-secondary invoice-export-preview-button" type="button" data-preview-kind="pdf" data-preview-url="{% url 'invoice_export' 'pdf' %}?{{ request.GET.urlencode }}" data-download-url="{% url 'invoice_export' 'pdf' %}?{{ request.GET.urlencode }}&download=1" data-export-label="Invoice PDF Report">PDF</button>
+  <button class="btn btn-outline-secondary invoice-export-preview-button" type="button" data-preview-kind="table" data-download-url="{% url 'invoice_export' 'xlsx' %}?{{ request.GET.urlencode }}" data-export-label="Invoice Excel Report">Excel</button>
+  <button class="btn btn-outline-secondary invoice-export-preview-button" type="button" data-preview-kind="table" data-download-url="{% url 'invoice_export' 'csv' %}?{{ request.GET.urlencode }}" data-export-label="Invoice CSV Report">CSV</button>
 </form>
 {% include "gst_app/partials/invoice_table.html" with invoices=invoices %}
+
+<div class="modal fade" id="invoiceExportPreviewModal" tabindex="-1" aria-labelledby="invoiceExportPreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="invoiceExportPreviewTitle">Invoice Report Preview</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body pdf-preview-body">
+        <iframe class="d-none" id="invoiceExportPreviewFrame" title="Invoice report PDF preview"></iframe>
+        <div class="report-preview-table" id="invoiceExportPreviewTable">
+          <table class="table align-middle">
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th>Invoice Date</th>
+                <th>Invoice #</th>
+                <th>Entered By</th>
+                <th class="text-end">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for invoice in invoices %}
+                <tr>
+                  <td>{{ invoice.supplier.name }}</td>
+                  <td>{{ invoice.invoice_date }}</td>
+                  <td>{{ invoice.invoice_number }}</td>
+                  <td>{{ invoice.entered_by }}</td>
+                  <td class="text-end">{% if invoice.invoice_amount %}{{ invoice.invoice_amount|currency }}{% else %}-{% endif %}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5">No invoices found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-success" id="invoiceExportPreviewDownload" href="#">Download</a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="modal fade" id="invoicePreviewModal" tabindex="-1" aria-labelledby="invoicePreviewTitle" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered">
@@ -27,6 +71,10 @@
       </div>
       <div class="modal-body invoice-preview-body">
         <iframe id="invoicePreviewFrame" title="Uploaded invoice preview"></iframe>
+        <div class="invoice-preview-unavailable d-none" id="invoicePreviewUnavailable">
+          <strong>Preview not available for this file type.</strong>
+          <p>Use the download button below when you are ready to open the original invoice file.</p>
+        </div>
       </div>
       <div class="modal-footer">
         <a class="btn btn-success" id="invoicePreviewDownload" href="#">Download File</a>
@@ -39,21 +87,50 @@
 <script>
   const previewModalElement = document.getElementById("invoicePreviewModal");
   const previewFrame = document.getElementById("invoicePreviewFrame");
+  const previewUnavailable = document.getElementById("invoicePreviewUnavailable");
   const previewTitle = document.getElementById("invoicePreviewTitle");
   const previewDownload = document.getElementById("invoicePreviewDownload");
+  const invoiceExportPreviewModalElement = document.getElementById("invoiceExportPreviewModal");
+  const invoiceExportPreviewFrame = document.getElementById("invoiceExportPreviewFrame");
+  const invoiceExportPreviewTable = document.getElementById("invoiceExportPreviewTable");
+  const invoiceExportPreviewTitle = document.getElementById("invoiceExportPreviewTitle");
+  const invoiceExportPreviewDownload = document.getElementById("invoiceExportPreviewDownload");
+
+  document.querySelectorAll(".invoice-export-preview-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const isPdf = button.dataset.previewKind === "pdf";
+      invoiceExportPreviewTitle.textContent = button.dataset.exportLabel || "Invoice Report Preview";
+      invoiceExportPreviewDownload.href = button.dataset.downloadUrl;
+      invoiceExportPreviewDownload.textContent = `Download ${button.textContent.trim()}`;
+      invoiceExportPreviewFrame.classList.toggle("d-none", !isPdf);
+      invoiceExportPreviewTable.classList.toggle("d-none", isPdf);
+      invoiceExportPreviewFrame.src = isPdf ? button.dataset.previewUrl : "";
+      bootstrap.Modal.getOrCreateInstance(invoiceExportPreviewModalElement).show();
+    });
+  });
 
   document.querySelectorAll(".invoice-preview-button").forEach((button) => {
     button.addEventListener("click", () => {
+      const canPreview = button.dataset.previewable === "1";
       previewTitle.textContent = button.dataset.invoiceLabel || "Invoice Preview";
-      previewFrame.src = button.dataset.previewUrl;
       previewDownload.href = button.dataset.downloadUrl;
+      previewFrame.classList.toggle("d-none", !canPreview);
+      previewUnavailable.classList.toggle("d-none", canPreview);
+      previewFrame.src = canPreview ? button.dataset.previewUrl : "";
       bootstrap.Modal.getOrCreateInstance(previewModalElement).show();
     });
   });
 
   previewModalElement.addEventListener("hidden.bs.modal", () => {
     previewFrame.src = "";
+    previewFrame.classList.remove("d-none");
+    previewUnavailable.classList.add("d-none");
     previewDownload.removeAttribute("href");
+  });
+
+  invoiceExportPreviewModalElement.addEventListener("hidden.bs.modal", () => {
+    invoiceExportPreviewFrame.src = "";
+    invoiceExportPreviewDownload.removeAttribute("href");
   });
 </script>
 {% endblock %}

@@ -14,8 +14,57 @@
   <dt>Date</dt><dd>{{ invoice.invoice_date }}</dd>
   <dt>Entered By</dt><dd>{{ invoice.entered_by }}</dd>
   <dt>Amount</dt><dd>{% if invoice.invoice_amount %}{{ invoice.invoice_amount|currency }}{% else %}Not entered{% endif %}</dd>
-  <dt>File</dt><dd><a href="{% url 'invoice_file_preview' invoice.pk %}">Preview uploaded invoice</a></dd>
+  <dt>File</dt><dd><button class="btn btn-sm btn-outline-success invoice-preview-button" type="button" data-preview-url="{% url 'invoice_file_preview' invoice.pk %}" data-download-url="{% url 'invoice_file_download' invoice.pk %}" data-previewable="{% if invoice.original_invoice_is_previewable %}1{% else %}0{% endif %}" data-invoice-label="{{ invoice.supplier.name }} - {{ invoice.invoice_number }}">Preview uploaded invoice</button></dd>
   <dt>Notes</dt><dd>{{ invoice.notes|default:"-" }}</dd>
   <dt>Created</dt><dd>{{ invoice.created_at }}</dd>
 </dl>
+
+<div class="modal fade" id="invoicePreviewModal" tabindex="-1" aria-labelledby="invoicePreviewTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="invoicePreviewTitle">Invoice Preview</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body invoice-preview-body">
+        <iframe id="invoicePreviewFrame" title="Uploaded invoice preview"></iframe>
+        <div class="invoice-preview-unavailable d-none" id="invoicePreviewUnavailable">
+          <strong>Preview not available for this file type.</strong>
+          <p>Use the download button below when you are ready to open the original invoice file.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-success" id="invoicePreviewDownload" href="#">Download File</a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const previewModalElement = document.getElementById("invoicePreviewModal");
+  const previewFrame = document.getElementById("invoicePreviewFrame");
+  const previewUnavailable = document.getElementById("invoicePreviewUnavailable");
+  const previewTitle = document.getElementById("invoicePreviewTitle");
+  const previewDownload = document.getElementById("invoicePreviewDownload");
+
+  document.querySelectorAll(".invoice-preview-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const canPreview = button.dataset.previewable === "1";
+      previewTitle.textContent = button.dataset.invoiceLabel || "Invoice Preview";
+      previewDownload.href = button.dataset.downloadUrl;
+      previewFrame.classList.toggle("d-none", !canPreview);
+      previewUnavailable.classList.toggle("d-none", canPreview);
+      previewFrame.src = canPreview ? button.dataset.previewUrl : "";
+      bootstrap.Modal.getOrCreateInstance(previewModalElement).show();
+    });
+  });
+
+  previewModalElement.addEventListener("hidden.bs.modal", () => {
+    previewFrame.src = "";
+    previewFrame.classList.remove("d-none");
+    previewUnavailable.classList.add("d-none");
+    previewDownload.removeAttribute("href");
+  });
+</script>
 {% endblock %}

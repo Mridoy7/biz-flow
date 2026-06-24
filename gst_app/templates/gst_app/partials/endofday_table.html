@@ -4,7 +4,7 @@
     {% if compact %}
       <thead><tr><th>Date</th><th>Entered By</th><th>Net Shop Sales</th><th></th></tr></thead>
     {% else %}
-      <thead><tr><th>Date</th><th>Site Name</th><th>Entered By</th><th>Total Sales</th><th>Difference</th><th></th></tr></thead>
+      <thead><tr><th>Date</th><th>Site Name</th><th>Entered By</th><th>Terminal Total</th><th>Difference</th><th></th></tr></thead>
     {% endif %}
     <tbody>
       {% for record in records %}
@@ -25,7 +25,7 @@
           {% else %}
             <td>{{ record.site_name|default:"-" }}</td>
             <td>{{ record.entered_by }}</td>
-            <td>{{ record.total_sales|currency }}</td>
+            <td>{{ record.total_sales_with_payments|currency }}</td>
             <td>{{ record.difference|currency }}</td>
             <td class="text-end">
               <a class="btn btn-sm btn-outline-primary" href="{% url 'endofday_detail' record.pk %}">View</a>
