@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from openpyxl import Workbook
 
 from .forms import EndOfDayForm, EndOfDayReportForm, InvoiceForm, InvoiceReportForm, SignupForm, SupplierForm
@@ -165,6 +166,7 @@ def invoice_detail(request, pk):
 
 
 @login_required
+@xframe_options_sameorigin
 def invoice_pdf_view(request, pk):
     invoice = get_object_or_404(owned_or_all(Invoice.objects.select_related("supplier"), request.user), pk=pk)
     return invoice_pdf(invoice)
@@ -180,6 +182,7 @@ def invoice_file_download(request, pk):
 
 
 @login_required
+@xframe_options_sameorigin
 def invoice_file_preview(request, pk):
     invoice = get_object_or_404(owned_or_all(Invoice.objects.all(), request.user), pk=pk)
     if not invoice.invoice_file:
@@ -277,6 +280,7 @@ def endofday_detail(request, pk):
 
 
 @login_required
+@xframe_options_sameorigin
 def endofday_pdf_view(request, pk):
     require_dayend_manager(request.user)
     record = get_object_or_404(owned_or_all(EndOfDay.objects.all(), request.user), pk=pk)
@@ -295,6 +299,7 @@ def endofday_file_download(request, pk, file_kind):
 
 
 @login_required
+@xframe_options_sameorigin
 def endofday_file_preview(request, pk, file_kind):
     require_dayend_manager(request.user)
     record = get_object_or_404(owned_or_all(EndOfDay.objects.all(), request.user), pk=pk)
@@ -318,6 +323,7 @@ def endofday_archive(request, pk):
 
 
 @login_required
+@xframe_options_sameorigin
 def invoice_export(request, filetype):
     invoices = filter_invoices(request.user, request.GET)
     rows = [[i.supplier.name, i.invoice_date, i.invoice_number, i.entered_by, money(i.invoice_amount or 0), i.created_at] for i in invoices]
@@ -326,6 +332,7 @@ def invoice_export(request, filetype):
 
 
 @login_required
+@xframe_options_sameorigin
 def endofday_export(request, filetype):
     require_dayend_manager(request.user)
     records = filter_endofday(request.user, request.GET)

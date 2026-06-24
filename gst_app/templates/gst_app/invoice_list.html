@@ -110,7 +110,8 @@
   });
 
   document.querySelectorAll(".invoice-preview-button").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
       const canPreview = button.dataset.previewable === "1";
       previewTitle.textContent = button.dataset.invoiceLabel || "Invoice Preview";
       previewDownload.href = button.dataset.downloadUrl;

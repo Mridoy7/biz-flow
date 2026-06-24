@@ -270,6 +270,7 @@ class InvoiceFileDownloadTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("inline", response["Content-Disposition"])
+        self.assertEqual(response["X-Frame-Options"], "SAMEORIGIN")
 
     def test_invoice_list_file_action_previews_before_download(self):
         upload = SimpleUploadedFile("invoice.pdf", b"invoice", content_type="application/pdf")
@@ -287,6 +288,7 @@ class InvoiceFileDownloadTests(TestCase):
 
         self.assertContains(response, "invoice-preview-button")
         self.assertContains(response, "Original invoice")
+        self.assertContains(response, f'href="/invoices/{Invoice.objects.get(invoice_number="INV-PREVIEW-BUTTON").pk}/file/preview/"')
         self.assertContains(response, "data-preview-url=")
         self.assertContains(response, "data-download-url=")
         self.assertContains(response, "invoiceExportPreviewModal")

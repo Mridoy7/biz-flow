@@ -13,7 +13,7 @@
             <a class="btn btn-sm btn-outline-primary" href="{% url 'invoice_detail' invoice.pk %}">View</a>
             {% if not compact %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'invoice_edit' invoice.pk %}">Edit</a>{% endif %}
             {% if not compact %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'invoice_pdf' invoice.pk %}">PDF</a>{% endif %}
-            {% if not compact %}<button class="btn btn-sm btn-outline-success invoice-preview-button" type="button" data-preview-url="{% url 'invoice_file_preview' invoice.pk %}" data-download-url="{% url 'invoice_file_download' invoice.pk %}" data-previewable="{% if invoice.original_invoice_is_previewable %}1{% else %}0{% endif %}" data-invoice-label="{{ invoice.supplier.name }} - {{ invoice.invoice_number }}">Original invoice</button>{% endif %}
+            {% if not compact %}<a class="btn btn-sm btn-outline-success invoice-preview-button" href="{% url 'invoice_file_preview' invoice.pk %}" data-preview-url="{% url 'invoice_file_preview' invoice.pk %}" data-download-url="{% url 'invoice_file_download' invoice.pk %}" data-previewable="{% if invoice.original_invoice_is_previewable %}1{% else %}0{% endif %}" data-invoice-label="{{ invoice.supplier.name }} - {{ invoice.invoice_number }}">Original invoice</a>{% endif %}
           </td>
         </tr>
       {% empty %}
