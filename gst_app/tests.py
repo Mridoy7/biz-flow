@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from reportlab.pdfgen import canvas
 
 from .forms import EndOfDayForm, InvoiceForm
-from .models import AccountRole, EndOfDay, Invoice, Supplier
+from .models import AccountRole, EndOfDay, Invoice, StoreSite, Supplier
 from .pdf import endofday_daysheet_rows, endofday_fuel_dip_rows
 
 
@@ -836,22 +836,37 @@ class AccountRoleAccessTests(TestCase):
         self.assertEqual(add_response.status_code, 200)
         self.assertContains(list_response, "Shared Supplier")
 
-    def test_staff_dashboard_hides_add_endofday(self):
+    def test_staff_dashboard_only_shows_invoice_work(self):
         self.client.login(username="staff", password="test-pass")
 
         response = self.client.get("/dashboard/")
 
         self.assertContains(response, "+ Add Invoice")
+        self.assertContains(response, "Recent Invoices")
+        self.assertContains(response, "Invoices")
         self.assertNotContains(response, "+ Add End of Day")
+        self.assertNotContains(response, "Latest End of Day")
+        self.assertNotContains(response, "End of Day Summary")
+        self.assertNotContains(response, 'href="/end-of-day/"')
 
-    def test_staff_cannot_add_or_edit_endofday(self):
+    def test_staff_cannot_access_endofday_pages(self):
         self.client.login(username="staff", password="test-pass")
 
+        list_response = self.client.get("/end-of-day/")
+        archived_response = self.client.get("/end-of-day/archived/")
         add_response = self.client.get("/end-of-day/add/")
+        detail_response = self.client.get(f"/end-of-day/{self.record.pk}/")
         edit_response = self.client.get(f"/end-of-day/{self.record.pk}/edit/")
+        pdf_response = self.client.get(f"/end-of-day/{self.record.pk}/pdf/")
+        export_response = self.client.get("/end-of-day/export/csv/")
 
+        self.assertEqual(list_response.status_code, 403)
+        self.assertEqual(archived_response.status_code, 403)
         self.assertEqual(add_response.status_code, 403)
+        self.assertEqual(detail_response.status_code, 403)
         self.assertEqual(edit_response.status_code, 403)
+        self.assertEqual(pdf_response.status_code, 403)
+        self.assertEqual(export_response.status_code, 403)
 
     def test_staff_cannot_archive_endofday(self):
         self.client.login(username="staff", password="test-pass")
@@ -877,3 +892,73 @@ class AccountRoleAccessTests(TestCase):
 
         self.assertContains(invoice_response, "STAFF-INV")
         self.assertContains(endofday_response, "Staff")
+
+    def test_accounts_are_limited_to_their_site(self):
+        site_two = StoreSite.objects.create(name="Site 2 Test")
+        other_manager = User.objects.create_user(username="manager-two", password="test-pass")
+        other_manager.profile.site = site_two
+        other_manager.profile.save()
+        other_staff = User.objects.create_user(username="staff-two", password="test-pass")
+        other_staff.profile.role = AccountRole.STAFF
+        other_staff.profile.site = site_two
+        other_staff.profile.save()
+        other_supplier = Supplier.objects.create(user=other_staff, site=site_two, name="Other Site Supplier")
+        other_invoice = Invoice.objects.create(
+            user=other_staff,
+            site=site_two,
+            supplier=other_supplier,
+            invoice_date=timezone.localdate(),
+            invoice_number="OTHER-SITE-INV",
+            invoice_file=SimpleUploadedFile("other-invoice.pdf", b"invoice", content_type="application/pdf"),
+            entered_by="Other Staff",
+        )
+        other_record = EndOfDay.objects.create(
+            user=other_staff,
+            site=site_two,
+            date=timezone.localdate(),
+            entered_by="Other Staff",
+            total_sales=0,
+            ezy_pin=0,
+            less_surcharge=0,
+        )
+
+        self.client.login(username="manager", password="test-pass")
+
+        invoice_response = self.client.get("/invoices/")
+        supplier_response = self.client.get("/suppliers/")
+        endofday_response = self.client.get("/end-of-day/")
+        other_invoice_detail = self.client.get(f"/invoices/{other_invoice.pk}/")
+        other_endofday_detail = self.client.get(f"/end-of-day/{other_record.pk}/")
+
+        self.assertContains(invoice_response, "STAFF-INV")
+        self.assertNotContains(invoice_response, "OTHER-SITE-INV")
+        self.assertContains(supplier_response, "Shared Supplier")
+        self.assertNotContains(supplier_response, "Other Site Supplier")
+        self.assertContains(endofday_response, "Staff")
+        self.assertNotContains(endofday_response, "Other Staff")
+        self.assertEqual(other_invoice_detail.status_code, 404)
+        self.assertEqual(other_endofday_detail.status_code, 404)
+
+    def test_admin_can_see_all_sites(self):
+        site_two = StoreSite.objects.create(name="Site 2 Test")
+        other_staff = User.objects.create_user(username="staff-two", password="test-pass")
+        other_staff.profile.role = AccountRole.STAFF
+        other_staff.profile.site = site_two
+        other_staff.profile.save()
+        other_supplier = Supplier.objects.create(user=other_staff, site=site_two, name="Other Site Supplier")
+        Invoice.objects.create(
+            user=other_staff,
+            site=site_two,
+            supplier=other_supplier,
+            invoice_date=timezone.localdate(),
+            invoice_number="OTHER-SITE-INV",
+            invoice_file=SimpleUploadedFile("other-invoice.pdf", b"invoice", content_type="application/pdf"),
+            entered_by="Other Staff",
+        )
+        admin = User.objects.create_superuser(username="admin", password="test-pass")
+
+        self.client.login(username="admin", password="test-pass")
+        response = self.client.get("/invoices/")
+
+        self.assertContains(response, "STAFF-INV")
+        self.assertContains(response, "OTHER-SITE-INV")

@@ -3,7 +3,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.utils import timezone
 
-from .models import EndOfDay, Invoice, Supplier
+from .models import EndOfDay, Invoice, Supplier, user_site
 
 
 END_OF_DAY_MONEY_FIELDS = [
@@ -67,6 +67,17 @@ class SupplierForm(forms.ModelForm):
         fields = ("name",)
 
 
+def suppliers_for_user(user):
+    if user is None:
+        return Supplier.objects.none()
+    if user.is_superuser:
+        return Supplier.objects.all()
+    site = user_site(user)
+    if not site:
+        return Supplier.objects.none()
+    return Supplier.objects.filter(site=site)
+
+
 class InvoiceForm(forms.ModelForm):
     class Meta:
         model = Invoice
@@ -91,7 +102,7 @@ class InvoiceForm(forms.ModelForm):
         self.fields["invoice_date"].initial = (self.instance.invoice_date if self.instance.pk else today).isoformat()
         self.fields["invoice_date"].widget.attrs.update({"min": today.isoformat(), "max": today.isoformat()})
         if user is not None:
-            self.fields["supplier"].queryset = Supplier.objects.all()
+            self.fields["supplier"].queryset = suppliers_for_user(user)
 
     def clean_invoice_date(self):
         invoice_date = self.cleaned_data["invoice_date"]
@@ -106,7 +117,7 @@ class InvoiceForm(forms.ModelForm):
         invoice_number = cleaned.get("invoice_number")
         if self.user and supplier and invoice_number:
             qs = Invoice.objects.filter(
-                user=self.user,
+                site=supplier.site,
                 supplier=supplier,
                 invoice_number__iexact=invoice_number.strip(),
             )
@@ -186,7 +197,7 @@ class EndOfDayForm(forms.ModelForm):
         if date and date != today:
             self.add_error("date", "End of Day date must be today's date.")
         if self.user and date:
-            qs = EndOfDay.objects.filter(user=self.user, date=date, archived_at__isnull=True)
+            qs = EndOfDay.objects.filter(site=user_site(self.user), date=date, archived_at__isnull=True)
             if self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
@@ -205,7 +216,7 @@ class InvoiceReportForm(forms.Form):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         if user is not None:
-            self.fields["supplier"].queryset = Supplier.objects.filter(user=user)
+            self.fields["supplier"].queryset = suppliers_for_user(user)
 
 
 class EndOfDayReportForm(forms.Form):

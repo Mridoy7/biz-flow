@@ -30,7 +30,9 @@
         <a class="side-link" href="{% url 'dashboard' %}">Dashboard</a>
         <a class="side-link" href="{% url 'supplier_list' %}">Suppliers</a>
         <a class="side-link" href="{% url 'invoice_list' %}">Invoices</a>
-        <a class="side-link" href="{% url 'endofday_list' %}">End of Day</a>
+        {% if can_manage_dayend %}
+          <a class="side-link" href="{% url 'endofday_list' %}">End of Day</a>
+        {% endif %}
       </aside>
     {% endif %}
 

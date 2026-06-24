@@ -14,13 +14,45 @@ from django.utils import timezone
 MONEY_ZERO = Decimal("0.00")
 
 
+class TimestampedModel(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+
 class AccountRole(models.TextChoices):
     STAFF = "staff", "Staff"
     MANAGER = "manager", "Manager"
 
 
+class StoreSite(TimestampedModel):
+    name = models.CharField(max_length=120, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+def default_store_site():
+    return StoreSite.objects.get_or_create(name="Site 1")[0]
+
+
+def profile_site_for_user(user):
+    if not user or not getattr(user, "is_authenticated", False):
+        return None
+    try:
+        return user.profile.site
+    except (UserProfile.DoesNotExist, AttributeError):
+        return None
+
+
 class UserProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
+    site = models.ForeignKey(StoreSite, blank=True, null=True, on_delete=models.PROTECT, related_name="user_profiles")
     role = models.CharField(max_length=20, choices=AccountRole.choices, default=AccountRole.MANAGER)
 
     def __str__(self):
@@ -42,22 +74,23 @@ def is_manager(user):
     return account_role(user) == AccountRole.MANAGER
 
 
+def user_site(user):
+    return profile_site_for_user(user)
+
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
-        UserProfile.objects.get_or_create(user=instance)
-
-
-class TimestampedModel(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        abstract = True
+        try:
+            site = default_store_site()
+        except Exception:
+            site = None
+        UserProfile.objects.get_or_create(user=instance, defaults={"site": site})
 
 
 class Supplier(TimestampedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="suppliers")
+    site = models.ForeignKey(StoreSite, blank=True, null=True, on_delete=models.PROTECT, related_name="suppliers")
     name = models.CharField(max_length=160)
 
     class Meta:
@@ -69,12 +102,18 @@ class Supplier(TimestampedModel):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        if not self.site_id:
+            self.site = profile_site_for_user(self.user)
+        super().save(*args, **kwargs)
+
     def get_absolute_url(self):
         return reverse("supplier_list")
 
 
 class Invoice(TimestampedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="invoices")
+    site = models.ForeignKey(StoreSite, blank=True, null=True, on_delete=models.PROTECT, related_name="invoices")
     supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name="invoices")
     invoice_date = models.DateField()
     invoice_number = models.CharField(max_length=120)
@@ -95,6 +134,11 @@ class Invoice(TimestampedModel):
     def __str__(self):
         return f"{self.supplier} - {self.invoice_number}"
 
+    def save(self, *args, **kwargs):
+        if not self.site_id:
+            self.site = self.supplier.site or profile_site_for_user(self.user)
+        super().save(*args, **kwargs)
+
     @property
     def original_invoice_is_previewable(self):
         if not self.invoice_file:
@@ -107,6 +151,7 @@ class Invoice(TimestampedModel):
 
 class EndOfDay(TimestampedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="end_of_day_records")
+    site = models.ForeignKey(StoreSite, blank=True, null=True, on_delete=models.PROTECT, related_name="end_of_day_records")
     date = models.DateField()
     site_name = models.CharField(max_length=120, blank=True)
     entered_by = models.CharField(max_length=120)
@@ -223,6 +268,8 @@ class EndOfDay(TimestampedModel):
             raise ValidationError({"note": "A note is required when the difference is more than $5."})
 
     def save(self, *args, **kwargs):
+        if not self.site_id:
+            self.site = profile_site_for_user(self.user)
         self.calculate()
         super().save(*args, **kwargs)
 

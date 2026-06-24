@@ -20,10 +20,12 @@
     <span>Total Invoices</span>
     <strong>{{ invoice_count }}</strong>
   </section>
-  <section class="metric-card">
-    <span>Latest End of Day</span>
-    <strong>{% if latest_endofday %}{{ latest_endofday.date }}{% else %}-{% endif %}</strong>
-  </section>
+  {% if can_manage_dayend %}
+    <section class="metric-card">
+      <span>Latest End of Day</span>
+      <strong>{% if latest_endofday %}{{ latest_endofday.date }}{% else %}-{% endif %}</strong>
+    </section>
+  {% endif %}
 </div>
 
 <div class="content-grid">
@@ -34,12 +36,14 @@
     </div>
     {% include "gst_app/partials/invoice_table.html" with invoices=recent_invoices compact=True %}
   </section>
-  <section>
-    <div class="section-title">
-      <h2 class="h5">End of Day Summary</h2>
-      <a href="{% url 'endofday_list' %}">Reports</a>
-    </div>
-    {% include "gst_app/partials/endofday_table.html" with records=recent_endofday compact=True %}
-  </section>
+  {% if can_manage_dayend %}
+    <section>
+      <div class="section-title">
+        <h2 class="h5">End of Day Summary</h2>
+        <a href="{% url 'endofday_list' %}">Reports</a>
+      </div>
+      {% include "gst_app/partials/endofday_table.html" with records=recent_endofday compact=True %}
+    </section>
+  {% endif %}
 </div>
 {% endblock %}
