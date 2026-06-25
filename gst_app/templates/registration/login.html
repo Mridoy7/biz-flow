@@ -1,19 +1,98 @@
 {% extends "gst_app/base.html" %}
 {% load gst_extras %}
-{% block title %}Login{% endblock %}
+{% block title %}Login - DailyOS{% endblock %}
+{% block body_class %}login-page{% endblock %}
 {% block content %}
-<section class="narrow-panel">
-  <h1 class="h4 mb-3">Login</h1>
-  <form method="post" class="stacked-form">
-    {% csrf_token %}
-    {{ form.non_field_errors }}
-    {% for field in form %}
-      <label class="form-label">{{ field.label }}</label>
-      {{ field|add_class:"form-control" }}
-      {{ field.errors }}
-    {% endfor %}
-    <button class="btn btn-primary" type="submit">Login</button>
-    <a href="{% url 'password_reset' %}">Forgot password?</a>
-  </form>
+<section class="login-shell">
+  <div class="login-dot-grid" aria-hidden="true"></div>
+  <div class="login-wave" aria-hidden="true"></div>
+
+  <div class="login-card">
+    <div class="login-brand" aria-label="DailyOS">
+      <span>Daily</span><strong>OS</strong>
+    </div>
+    <p class="login-tagline">Run your business. Every day.</p>
+
+    <div class="login-heading">
+      <h1>Welcome back!</h1>
+      <p>Sign in to continue to your account</p>
+    </div>
+
+    <form method="post" class="login-form">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div>
+        <label class="login-label" for="{{ form.username.id_for_label }}">Username</label>
+        <div class="login-input-wrap">
+          <span class="login-input-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img">
+              <path d="M4 6.75A2.75 2.75 0 0 1 6.75 4h10.5A2.75 2.75 0 0 1 20 6.75v10.5A2.75 2.75 0 0 1 17.25 20H6.75A2.75 2.75 0 0 1 4 17.25V6.75Z"/>
+              <path d="m5.25 7 6.3 5.15a.7.7 0 0 0 .9 0L18.75 7"/>
+            </svg>
+          </span>
+          {{ form.username|add_attrs:"class:login-input,placeholder:Enter your username,autocomplete:username" }}
+        </div>
+        {{ form.username.errors }}
+      </div>
+
+      <div>
+        <label class="login-label" for="{{ form.password.id_for_label }}">Password</label>
+        <div class="login-input-wrap">
+          <span class="login-input-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img">
+              <rect x="5" y="10" width="14" height="10" rx="2"/>
+              <path d="M8 10V8a4 4 0 0 1 8 0v2"/>
+              <path d="M12 14v2"/>
+            </svg>
+          </span>
+          {{ form.password|add_attrs:"class:login-input,placeholder:Enter your password,autocomplete:current-password" }}
+          <button class="login-password-toggle" type="button" data-password-toggle aria-label="Show password">
+            <svg viewBox="0 0 24 24" role="img">
+              <path d="M3 3l18 18"/>
+              <path d="M10.6 10.6A2 2 0 0 0 13.4 13.4"/>
+              <path d="M9.3 5.4A9.8 9.8 0 0 1 12 5c5 0 8.6 4.4 9.8 6.3a1.4 1.4 0 0 1 0 1.4 18 18 0 0 1-2.7 3.2"/>
+              <path d="M6.6 6.6a18.5 18.5 0 0 0-4.4 4.7 1.4 1.4 0 0 0 0 1.4C3.4 14.6 7 19 12 19a9.8 9.8 0 0 0 4.2-.9"/>
+            </svg>
+          </button>
+        </div>
+        {{ form.password.errors }}
+      </div>
+
+      <div class="login-options">
+        <label class="login-check">
+          <input type="checkbox" name="remember_me" value="1">
+          <span>Remember me</span>
+        </label>
+        <a href="{% url 'password_reset' %}">Forgot password?</a>
+      </div>
+
+      <button class="login-submit" type="submit">Log In</button>
+    </form>
+
+    <div class="login-secure">
+      <span></span>
+      <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <path d="M12 3 19 6v5c0 4.5-2.8 8.5-7 10-4.2-1.5-7-5.5-7-10V6l7-3Z"/>
+        <path d="m9.5 12 1.7 1.7 3.5-4"/>
+      </svg>
+      <span></span>
+    </div>
+    <p class="login-secure-text">Your data is secure with us</p>
+    <p class="login-register">Need an account? <a href="{% url 'signup' %}">Register</a></p>
+  </div>
 </section>
+
+<script>
+  document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = button.closest(".login-input-wrap").querySelector("input");
+      const shouldShow = input.type === "password";
+      input.type = shouldShow ? "text" : "password";
+      button.setAttribute("aria-label", shouldShow ? "Hide password" : "Show password");
+    });
+  });
+</script>
 {% endblock %}

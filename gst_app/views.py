@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, HttpResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,6 +19,17 @@ from .forms import EndOfDayForm, EndOfDayReportForm, InvoiceForm, InvoiceReportF
 from .models import EndOfDay, Invoice, InvoiceAttachment, Supplier, is_manager, user_site
 from .pdf import endofday_pdf, invoice_pdf, merged_invoice_upload_pdf_bytes, money, report_pdf
 from .services import snapshot_instance, write_audit_logs
+
+
+class AppLoginView(LoginView):
+    template_name = "registration/login.html"
+
+    def form_valid(self, form):
+        if self.request.POST.get("remember_me"):
+            self.request.session.set_expiry(60 * 60 * 24 * 30)
+        else:
+            self.request.session.set_expiry(0)
+        return super().form_valid(form)
 
 
 def safe_next_url(request, fallback):

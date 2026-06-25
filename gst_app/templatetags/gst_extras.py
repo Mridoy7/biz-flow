@@ -19,6 +19,17 @@ def add_class(field, css_class):
 
 
 @register.filter
+def add_attrs(field, attrs):
+    widget_attrs = {}
+    for item in attrs.split(","):
+        if ":" not in item:
+            continue
+        key, value = item.split(":", 1)
+        widget_attrs[key.strip()] = value.strip()
+    return field.as_widget(attrs=widget_attrs)
+
+
+@register.filter
 def is_file_field(field):
     return isinstance(field.field.widget, FileInput)
 
