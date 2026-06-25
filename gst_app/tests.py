@@ -832,6 +832,40 @@ class ReturnLinkTests(TestCase):
         self.assertContains(response, "Logout")
 
 
+class SignupApprovalTests(TestCase):
+    def test_signup_creates_inactive_user_waiting_for_admin_approval(self):
+        response = self.client.post(
+            "/signup/",
+            {
+                "username": "newstaff",
+                "email": "newstaff@example.com",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        user = User.objects.get(username="newstaff")
+
+        self.assertRedirects(response, "/accounts/login/")
+        self.assertFalse(user.is_active)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_signup_page_explains_admin_approval(self):
+        response = self.client.get("/signup/")
+
+        self.assertContains(response, "New accounts need admin approval")
+
+    def test_inactive_user_cannot_login(self):
+        User.objects.create_user(username="waiting", password="test-pass", is_active=False)
+
+        login_ok = self.client.login(username="waiting", password="test-pass")
+        response = self.client.post("/accounts/login/", {"username": "waiting", "password": "test-pass"})
+
+        self.assertFalse(login_ok)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertContains(response, "Please enter a correct")
+
+
 class EndOfDayArchiveTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="owner", password="test-pass")

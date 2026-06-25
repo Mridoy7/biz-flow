@@ -4,7 +4,6 @@ from pathlib import Path
 from datetime import timedelta
 
 from django.contrib import messages
-from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, HttpResponse, Http404
@@ -52,10 +51,11 @@ def signup(request):
     if request.method == "POST":
         form = SignupForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login(request, user)
-            messages.success(request, "Account created. Welcome.")
-            return redirect("dashboard")
+            user = form.save(commit=False)
+            user.is_active = False
+            user.save()
+            messages.success(request, "Account created. Please wait for admin approval before logging in.")
+            return redirect("login")
     else:
         form = SignupForm()
     return render(request, "registration/signup.html", {"form": form})

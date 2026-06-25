@@ -21,9 +21,16 @@ class StoreSiteAdmin(admin.ModelAdmin):
 admin.site.unregister(User)
 
 
+@admin.action(description="Approve selected users")
+def approve_users(modeladmin, request, queryset):
+    queryset.update(is_active=True)
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     inlines = (UserProfileInline,)
+    list_display = ("username", "email", "first_name", "last_name", "is_staff", "is_active")
+    actions = (approve_users,)
 
 
 @admin.register(Supplier)
