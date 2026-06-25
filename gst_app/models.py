@@ -50,6 +50,10 @@ def profile_site_for_user(user):
         return None
 
 
+def file_is_previewable_name(file_name):
+    return str(file_name).lower().endswith((".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"))
+
+
 class UserProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
     site = models.ForeignKey(StoreSite, blank=True, null=True, on_delete=models.PROTECT, related_name="user_profiles")
@@ -143,10 +147,36 @@ class Invoice(TimestampedModel):
     def original_invoice_is_previewable(self):
         if not self.invoice_file:
             return False
-        return self.invoice_file.name.lower().endswith((".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"))
+        return file_is_previewable_name(self.invoice_file.name)
 
     def get_absolute_url(self):
         return reverse("invoice_detail", kwargs={"pk": self.pk})
+
+
+class InvoiceAttachment(TimestampedModel):
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="invoices/attachments/%Y/%m/")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="invoice_attachments",
+    )
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self):
+        return self.filename
+
+    @property
+    def filename(self):
+        return self.file.name.rsplit("/", 1)[-1] if self.file else ""
+
+    @property
+    def is_previewable(self):
+        return bool(self.file and file_is_previewable_name(self.file.name))
 
 
 class EndOfDay(TimestampedModel):

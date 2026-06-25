@@ -12,10 +12,16 @@
   <header class="app-topbar">
     <a class="app-brand" href="{% url 'dashboard' %}">Smartmate</a>
     {% if user.is_authenticated %}
-      <form class="topbar-action" method="post" action="{% url 'logout' %}">
-        {% csrf_token %}
-        <button class="btn btn-outline-secondary btn-sm" type="submit">Logout</button>
-      </form>
+      <div class="topbar-action d-flex align-items-center gap-2">
+        <span class="badge text-bg-light border">
+          {{ user.get_full_name|default:user.username }}
+          {% if user.profile.site %}<span class="text-secondary">/ {{ user.profile.site.name }}</span>{% endif %}
+        </span>
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button class="btn btn-outline-secondary btn-sm" type="submit">Logout</button>
+        </form>
+      </div>
     {% else %}
       <div class="topbar-action d-flex gap-2">
         <a class="btn btn-outline-secondary btn-sm" href="{% url 'login' %}">Login</a>

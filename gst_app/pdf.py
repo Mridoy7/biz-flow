@@ -193,6 +193,39 @@ def uploaded_daysheet_pdfs(record):
             continue
 
 
+def uploaded_file_pdf_reader(uploaded, title):
+    filename = uploaded.name.lower()
+    with uploaded.open("rb") as file_obj:
+        if filename.endswith(".pdf"):
+            return PdfReader(BytesIO(file_obj.read()))
+        if filename.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+            return PdfReader(image_upload_to_pdf(file_obj, title))
+    return None
+
+
+def merged_invoice_upload_pdf_bytes(invoice):
+    writer = PdfWriter()
+    readers = []
+    upload_specs = [("Invoice page 1", invoice.invoice_file)]
+    upload_specs.extend((f"Invoice page {index}", attachment.file) for index, attachment in enumerate(invoice.attachments.all(), start=2))
+    for title, uploaded in upload_specs:
+        if not uploaded:
+            continue
+        try:
+            reader = uploaded_file_pdf_reader(uploaded, title)
+        except Exception:
+            continue
+        if reader:
+            readers.append(reader)
+    if not readers:
+        return None
+    for reader in readers:
+        append_reader_pages(writer, reader)
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
 def merged_endofday_pdf_bytes(record, base_pdf):
     writer = PdfWriter()
     append_reader_pages(writer, PdfReader(BytesIO(base_pdf)))

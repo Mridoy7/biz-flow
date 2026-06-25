@@ -386,7 +386,14 @@ a:hover {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.invoice-form-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
 .form-grid > div,
+.invoice-form-grid > div,
 .stacked-form > div {
   background: #f8fafc;
   border: 1px solid #cbd5e1;
@@ -396,6 +403,7 @@ a:hover {
 }
 
 .form-grid > div:nth-child(2n),
+.invoice-form-grid > div:nth-child(2n),
 .stacked-form > div:nth-child(2n) {
   background: #f1f5f9;
   border-color: #94a3b8;
@@ -403,6 +411,7 @@ a:hover {
 }
 
 .form-grid > div:nth-child(3n),
+.invoice-form-grid > div:nth-child(3n),
 .stacked-form > div:nth-child(3n) {
   background: #e5e7eb;
   border-color: #64748b;
@@ -410,6 +419,7 @@ a:hover {
 }
 
 .form-grid > div:nth-child(4n),
+.invoice-form-grid > div:nth-child(4n),
 .stacked-form > div:nth-child(4n) {
   background: #ffffff;
   border-color: #334155;
@@ -417,10 +427,15 @@ a:hover {
 }
 
 .form-grid > div:focus-within,
+.invoice-form-grid > div:focus-within,
 .stacked-form > div:focus-within {
   background: #ffffff;
   border-color: #111827;
   box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.14), 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
+.span-2 {
+  grid-column: 1 / -1;
 }
 
 .form-label {
@@ -437,6 +452,47 @@ a:hover {
   align-items: center;
   display: flex;
   gap: 14px;
+  justify-content: space-between;
+}
+
+.invoice-upload-panel,
+.attachment-panel {
+  background: #ffffff;
+  border: 1px solid var(--sm-line);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.invoice-upload-card {
+  background: #f8fafc;
+  border: 1px dashed #64748b;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.invoice-upload-card:focus-within {
+  background: #ffffff;
+  border-color: #111827;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.12);
+}
+
+.attachment-card {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.attachment-card-top {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: space-between;
 }
 
@@ -457,6 +513,32 @@ a:hover {
   overflow: hidden;
   position: absolute;
   width: 1px;
+}
+
+.upload-selected-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.upload-selected-item {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.upload-selected-item span {
+  color: #111827;
+  font-size: 0.92rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .fuel-dip-panel {

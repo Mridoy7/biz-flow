@@ -16,8 +16,8 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from openpyxl import Workbook
 
 from .forms import EndOfDayForm, EndOfDayReportForm, InvoiceForm, InvoiceReportForm, SignupForm, SupplierForm
-from .models import EndOfDay, Invoice, Supplier, is_manager, user_site
-from .pdf import endofday_pdf, invoice_pdf, money, report_pdf
+from .models import EndOfDay, Invoice, InvoiceAttachment, Supplier, is_manager, user_site
+from .pdf import endofday_pdf, invoice_pdf, merged_invoice_upload_pdf_bytes, money, report_pdf
 from .services import snapshot_instance, write_audit_logs
 
 
@@ -135,6 +135,67 @@ def filter_invoices(user, params):
     return invoices
 
 
+def invoice_attachments_for_user(user):
+    attachments = InvoiceAttachment.objects.select_related("invoice")
+    if user.is_superuser:
+        return attachments
+    site = user_site(user)
+    if site:
+        return attachments.filter(invoice__site=site)
+    return attachments.none()
+
+
+def save_new_invoice_attachments(invoice, uploaded_files, user):
+    for uploaded_file in uploaded_files:
+        InvoiceAttachment.objects.create(invoice=invoice, file=uploaded_file, uploaded_by=user)
+
+
+def delete_invoice_attachments(invoice):
+    for attachment in invoice.attachments.all():
+        if attachment.file:
+            attachment.file.delete(save=False)
+        attachment.delete()
+
+
+def replace_invoice_pages(invoice, uploaded_files, user, old_invoice_file=None):
+    if not uploaded_files:
+        return
+    if old_invoice_file:
+        old_invoice_file.delete(save=False)
+    delete_invoice_attachments(invoice)
+    save_new_invoice_attachments(invoice, uploaded_files[1:], user)
+
+
+def add_invoice_pages(invoice, uploaded_files, user):
+    if not uploaded_files:
+        return
+    if not invoice.invoice_file:
+        invoice.invoice_file = uploaded_files[0]
+        invoice.save(update_fields=["invoice_file", "updated_at"])
+        save_new_invoice_attachments(invoice, uploaded_files[1:], user)
+        return
+    save_new_invoice_attachments(invoice, uploaded_files, user)
+
+
+def update_invoice_attachments(request, invoice):
+    attachment_ids_to_delete = set(request.POST.getlist("delete_attachments"))
+    attachments = invoice.attachments.all()
+    for attachment in attachments:
+        replacement = request.FILES.get(f"replace_attachment_{attachment.pk}")
+        should_delete = str(attachment.pk) in attachment_ids_to_delete
+        if should_delete:
+            if attachment.file:
+                attachment.file.delete(save=False)
+            attachment.delete()
+            continue
+        if replacement:
+            if attachment.file:
+                attachment.file.delete(save=False)
+            attachment.file = replacement
+            attachment.uploaded_by = request.user
+            attachment.save(update_fields=["file", "uploaded_by", "updated_at"])
+
+
 @login_required
 def invoice_form(request, pk=None):
     invoice = None
@@ -146,17 +207,39 @@ def invoice_form(request, pk=None):
         form = InvoiceForm(request.POST, request.FILES, instance=invoice, user=request.user)
         if form.is_valid():
             saved = form.save(commit=False)
+            invoice_pages = form.cleaned_data.get("invoice_pages", [])
             if not saved.pk:
                 saved.user = request.user
             if not saved.site_id:
                 saved.site = saved.supplier.site or user_site(request.user)
+            if invoice_pages and not saved.pk:
+                saved.invoice_file = invoice_pages[0]
             saved.save()
+            if invoice_pages:
+                if invoice:
+                    add_invoice_pages(saved, invoice_pages, request.user)
+                else:
+                    replace_invoice_pages(saved, invoice_pages, request.user)
+            update_invoice_attachments(request, saved)
             write_audit_logs(request.user, saved, before, ["supplier", "invoice_date", "invoice_number", "entered_by", "invoice_amount", "notes"])
             messages.success(request, "Invoice saved.")
             return redirect(saved)
     else:
         form = InvoiceForm(instance=invoice, user=request.user)
-    return render(request, "gst_app/form.html", {"form": form, "title": "Invoice", "cancel_url": cancel_url})
+    attachments = invoice.attachments.all() if invoice else []
+    invoice_page_count = (1 + len(attachments)) if invoice and invoice.invoice_file else 0
+    return render(
+        request,
+        "gst_app/invoice_form.html",
+        {
+            "form": form,
+            "invoice": invoice,
+            "attachments": attachments,
+            "invoice_page_count": invoice_page_count,
+            "title": "Invoice",
+            "cancel_url": cancel_url,
+        },
+    )
 
 
 @login_required
@@ -174,9 +257,14 @@ def invoice_pdf_view(request, pk):
 
 @login_required
 def invoice_file_download(request, pk):
-    invoice = get_object_or_404(owned_or_all(Invoice.objects.all(), request.user), pk=pk)
+    invoice = get_object_or_404(owned_or_all(Invoice.objects.prefetch_related("attachments"), request.user), pk=pk)
     if not invoice.invoice_file:
         raise Http404("No uploaded invoice file found.")
+    merged_pdf = merged_invoice_upload_pdf_bytes(invoice)
+    if merged_pdf:
+        response = HttpResponse(merged_pdf, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="invoice-{invoice.pk}-pages.pdf"'
+        return response
     filename = Path(invoice.invoice_file.name).name
     return FileResponse(invoice.invoice_file.open("rb"), as_attachment=True, filename=filename)
 
@@ -184,12 +272,37 @@ def invoice_file_download(request, pk):
 @login_required
 @xframe_options_sameorigin
 def invoice_file_preview(request, pk):
-    invoice = get_object_or_404(owned_or_all(Invoice.objects.all(), request.user), pk=pk)
+    invoice = get_object_or_404(owned_or_all(Invoice.objects.prefetch_related("attachments"), request.user), pk=pk)
     if not invoice.invoice_file:
         raise Http404("No uploaded invoice file found.")
+    merged_pdf = merged_invoice_upload_pdf_bytes(invoice)
+    if merged_pdf:
+        response = HttpResponse(merged_pdf, content_type="application/pdf")
+        response["Content-Disposition"] = f'inline; filename="invoice-{invoice.pk}-pages.pdf"'
+        return response
     filename = Path(invoice.invoice_file.name).name
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return FileResponse(invoice.invoice_file.open("rb"), as_attachment=False, filename=filename, content_type=content_type)
+
+
+@login_required
+def invoice_attachment_download(request, pk):
+    attachment = get_object_or_404(invoice_attachments_for_user(request.user), pk=pk)
+    if not attachment.file:
+        raise Http404("No uploaded invoice attachment found.")
+    filename = Path(attachment.file.name).name
+    return FileResponse(attachment.file.open("rb"), as_attachment=True, filename=filename)
+
+
+@login_required
+@xframe_options_sameorigin
+def invoice_attachment_preview(request, pk):
+    attachment = get_object_or_404(invoice_attachments_for_user(request.user), pk=pk)
+    if not attachment.file:
+        raise Http404("No uploaded invoice attachment found.")
+    filename = Path(attachment.file.name).name
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return FileResponse(attachment.file.open("rb"), as_attachment=False, filename=filename, content_type=content_type)
 
 
 def endofday_uploaded_file(record, file_kind):

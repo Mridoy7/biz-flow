@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 
-from .models import AuditLog, EndOfDay, Invoice, StoreSite, Supplier, UserProfile
+from .models import AuditLog, EndOfDay, Invoice, InvoiceAttachment, StoreSite, Supplier, UserProfile
 
 
 class UserProfileInline(admin.StackedInline):
@@ -33,11 +33,25 @@ class SupplierAdmin(admin.ModelAdmin):
     list_filter = ("site",)
 
 
+class InvoiceAttachmentInline(admin.TabularInline):
+    model = InvoiceAttachment
+    extra = 0
+    fields = ("file", "uploaded_by", "created_at")
+    readonly_fields = ("created_at",)
+
+
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
     list_display = ("invoice_number", "supplier", "site", "invoice_date", "invoice_amount", "user", "created_at")
     search_fields = ("invoice_number", "supplier__name", "site__name", "entered_by")
     list_filter = ("site", "invoice_date", "supplier")
+    inlines = (InvoiceAttachmentInline,)
+
+
+@admin.register(InvoiceAttachment)
+class InvoiceAttachmentAdmin(admin.ModelAdmin):
+    list_display = ("filename", "invoice", "uploaded_by", "created_at")
+    search_fields = ("file", "invoice__invoice_number", "invoice__supplier__name")
 
 
 @admin.register(EndOfDay)

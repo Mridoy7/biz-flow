@@ -1,0 +1,176 @@
+{% extends "gst_app/base.html" %}
+{% load gst_extras %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="form-panel wide">
+  <div class="page-header">
+    <h1 class="h4 mb-0">{{ title }}</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ cancel_url }}">Back</a>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="stacked-form">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ cancel_url }}">
+    <div class="invoice-form-grid">
+      {% for field in form %}
+        {% if field.name == "invoice_pages" %}
+        {% else %}
+          <div class="{% if field.name == 'notes' %}span-2{% endif %}">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field|add_class:"form-control" }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {{ field.errors }}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    <section class="invoice-upload-panel">
+      <div class="section-title">
+        <h2 class="h6 mb-0">Upload Invoice</h2>
+      </div>
+      {% for field in form %}
+        {% if field.name == "invoice_pages" %}
+          <div class="upload-card invoice-upload-card" data-upload-card>
+            <div>
+              <div class="upload-current" data-upload-status>
+                {% if invoice_page_count %}
+                  Current invoice has {{ invoice_page_count }} page{% if invoice_page_count != 1 %}s{% endif %}.
+                {% else %}
+                  No invoice uploaded yet
+                {% endif %}
+              </div>
+              {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+              <ul class="upload-selected-list d-none" data-upload-list></ul>
+            </div>
+            <div class="upload-actions">
+              <label class="btn btn-outline-primary btn-sm mb-0" for="{{ field.id_for_label }}">
+                Upload Invoice
+              </label>
+              {{ field|add_class:"upload-input" }}
+            </div>
+            {{ field.errors }}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </section>
+
+    {% if invoice %}
+      <section class="attachment-panel">
+        <div class="section-title">
+          <h2 class="h6 mb-0">Current invoice pages</h2>
+        </div>
+        {% if invoice.invoice_file %}
+          <div class="attachment-card">
+            <div class="attachment-card-top">
+              <div>
+                <strong>Page 1 - {{ invoice.invoice_file|basename }}</strong>
+                <div class="form-text">Use the upload box above to add more pages to this invoice.</div>
+              </div>
+              <div class="action-row mb-0">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'invoice_file_preview' invoice.pk %}" target="_blank" rel="noopener">Preview combined PDF</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'invoice_file_download' invoice.pk %}">Download combined PDF</a>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+        {% for attachment in attachments %}
+          <div class="attachment-card">
+            <div class="attachment-card-top">
+              <div>
+                <strong>Page {{ forloop.counter|add:1 }} - {{ attachment.filename }}</strong>
+                <div class="form-text">Uploaded {{ attachment.created_at }}</div>
+              </div>
+              <div class="action-row mb-0">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'invoice_attachment_preview' attachment.pk %}" target="_blank" rel="noopener">Preview</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'invoice_attachment_download' attachment.pk %}">Download</a>
+              </div>
+            </div>
+            <div class="row g-2 align-items-end mt-1">
+              <div class="col-md-8">
+                <label class="form-label" for="replace_attachment_{{ attachment.pk }}">Change file</label>
+                <input class="form-control" id="replace_attachment_{{ attachment.pk }}" name="replace_attachment_{{ attachment.pk }}" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx">
+              </div>
+              <div class="col-md-4">
+                <div class="form-check mt-4">
+                  <input class="form-check-input" id="delete_attachment_{{ attachment.pk }}" name="delete_attachments" type="checkbox" value="{{ attachment.pk }}">
+                  <label class="form-check-label text-danger" for="delete_attachment_{{ attachment.pk }}">Delete this file</label>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          {% if not invoice.invoice_file %}<p class="text-secondary mb-0">No invoice pages uploaded yet.</p>{% endif %}
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+</section>
+<script>
+  document.querySelectorAll("[data-upload-card]").forEach((card) => {
+    const input = card.querySelector("input[type='file']");
+    const status = card.querySelector("[data-upload-status]");
+    const list = card.querySelector("[data-upload-list]");
+    if (!input || !status) {
+      return;
+    }
+    const originalStatus = status.textContent.trim();
+    let selectedFiles = [];
+
+    const syncInputFiles = () => {
+      if (typeof DataTransfer === "undefined") {
+        return;
+      }
+      const transfer = new DataTransfer();
+      selectedFiles.forEach((file) => transfer.items.add(file));
+      input.files = transfer.files;
+    };
+
+    const renderSelectedFiles = () => {
+      if (!selectedFiles.length) {
+        status.textContent = originalStatus;
+        if (list) {
+          list.classList.add("d-none");
+          list.innerHTML = "";
+        }
+        return;
+      }
+      status.textContent = selectedFiles.length === 1 ? "1 page selected" : `${selectedFiles.length} pages selected`;
+      if (!list) {
+        return;
+      }
+      list.classList.remove("d-none");
+      list.innerHTML = "";
+      selectedFiles.forEach((file, index) => {
+        const item = document.createElement("li");
+        item.className = "upload-selected-item";
+        const name = document.createElement("span");
+        name.textContent = `Page ${index + 1}: ${file.name}`;
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "btn btn-sm btn-outline-danger";
+        removeButton.textContent = "Remove";
+        removeButton.addEventListener("click", () => {
+          selectedFiles.splice(index, 1);
+          syncInputFiles();
+          renderSelectedFiles();
+        });
+        item.append(name, removeButton);
+        list.appendChild(item);
+      });
+    };
+
+    input.addEventListener("change", () => {
+      const newFiles = Array.from(input.files || []);
+      if (!newFiles.length) {
+        renderSelectedFiles();
+        return;
+      }
+      selectedFiles = selectedFiles.concat(newFiles);
+      syncInputFiles();
+      renderSelectedFiles();
+    });
+  });
+</script>
+{% endblock %}

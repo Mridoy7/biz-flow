@@ -14,7 +14,20 @@
   <dt>Date</dt><dd>{{ invoice.invoice_date }}</dd>
   <dt>Entered By</dt><dd>{{ invoice.entered_by }}</dd>
   <dt>Amount</dt><dd>{% if invoice.invoice_amount %}{{ invoice.invoice_amount|currency }}{% else %}Not entered{% endif %}</dd>
-  <dt>File</dt><dd><button class="btn btn-sm btn-outline-success invoice-preview-button" type="button" data-preview-url="{% url 'invoice_file_preview' invoice.pk %}" data-download-url="{% url 'invoice_file_download' invoice.pk %}" data-previewable="{% if invoice.original_invoice_is_previewable %}1{% else %}0{% endif %}" data-invoice-label="{{ invoice.supplier.name }} - {{ invoice.invoice_number }}">Preview uploaded invoice</button></dd>
+  <dt>Invoice PDF</dt><dd><button class="btn btn-sm btn-outline-success invoice-preview-button" type="button" data-preview-url="{% url 'invoice_file_preview' invoice.pk %}" data-download-url="{% url 'invoice_file_download' invoice.pk %}" data-previewable="{% if invoice.original_invoice_is_previewable %}1{% else %}0{% endif %}" data-invoice-label="{{ invoice.supplier.name }} - {{ invoice.invoice_number }}">Preview combined invoice</button></dd>
+  <dt>Invoice pages</dt>
+  <dd>
+    <div class="d-flex flex-wrap gap-2">
+      {% if invoice.invoice_file %}
+        <span class="badge text-bg-light border">Page 1</span>
+      {% endif %}
+      {% for attachment in invoice.attachments.all %}
+        <span class="badge text-bg-light border">Page {{ forloop.counter|add:1 }}</span>
+      {% empty %}
+        {% if not invoice.invoice_file %}<span class="text-secondary">No invoice pages uploaded.</span>{% endif %}
+      {% endfor %}
+    </div>
+  </dd>
   <dt>Notes</dt><dd>{{ invoice.notes|default:"-" }}</dd>
   <dt>Created</dt><dd>{{ invoice.created_at }}</dd>
 </dl>
@@ -30,11 +43,11 @@
         <iframe id="invoicePreviewFrame" title="Uploaded invoice preview"></iframe>
         <div class="invoice-preview-unavailable d-none" id="invoicePreviewUnavailable">
           <strong>Preview not available for this file type.</strong>
-          <p>Use the download button below when you are ready to open the original invoice file.</p>
+          <p>Use the download button below when you are ready to open the invoice file.</p>
         </div>
       </div>
       <div class="modal-footer">
-        <a class="btn btn-success" id="invoicePreviewDownload" href="#">Download File</a>
+        <a class="btn btn-success" id="invoicePreviewDownload" href="#">Download PDF</a>
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>

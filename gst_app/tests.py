@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from reportlab.pdfgen import canvas
 
 from .forms import EndOfDayForm, InvoiceForm
-from .models import AccountRole, EndOfDay, Invoice, StoreSite, Supplier
+from .models import AccountRole, EndOfDay, Invoice, InvoiceAttachment, StoreSite, Supplier
 from .pdf import endofday_daysheet_rows, endofday_fuel_dip_rows
 
 
@@ -143,7 +143,7 @@ class SameDayFormValidationTests(TestCase):
                 "invoice_number": "INV-OLD",
                 "entered_by": "Ridoy",
             },
-            files={"invoice_file": upload},
+            files={"invoice_pages": upload},
             user=self.user,
         )
 
@@ -169,7 +169,7 @@ class SameDayFormValidationTests(TestCase):
                 "invoice_number": "INV-1",
                 "entered_by": "Ridoy",
             },
-            files={"invoice_file": duplicate_upload},
+            files={"invoice_pages": duplicate_upload},
             user=self.user,
         )
 
@@ -236,6 +236,8 @@ class InvoiceFileDownloadTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="owner", password="test-pass")
         self.supplier = Supplier.objects.create(user=self.user, name="Fuel Supplier")
+        self.temp_media = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_media.cleanup)
 
     def test_invoice_file_download_is_available_to_owner(self):
         upload = SimpleUploadedFile("invoice.pdf", b"invoice", content_type="application/pdf")
@@ -287,7 +289,7 @@ class InvoiceFileDownloadTests(TestCase):
         response = self.client.get("/invoices/")
 
         self.assertContains(response, "invoice-preview-button")
-        self.assertContains(response, "Original invoice")
+        self.assertContains(response, "Invoice PDF")
         self.assertContains(response, f'href="/invoices/{Invoice.objects.get(invoice_number="INV-PREVIEW-BUTTON").pk}/file/preview/"')
         self.assertContains(response, "data-preview-url=")
         self.assertContains(response, "data-download-url=")
@@ -316,6 +318,143 @@ class InvoiceFileDownloadTests(TestCase):
 
         self.assertContains(response, 'data-previewable="0"')
         self.assertContains(response, "Preview not available for this file type.")
+
+    def test_invoice_form_accepts_multiple_pages_and_serves_one_pdf(self):
+        self.client.login(username="owner", password="test-pass")
+        with override_settings(MEDIA_ROOT=self.temp_media.name):
+            response = self.client.post(
+                "/invoices/add/",
+                {
+                    "supplier": self.supplier.pk,
+                    "invoice_date": timezone.localdate().isoformat(),
+                    "invoice_number": "INV-MULTI",
+                    "entered_by": "Ridoy",
+                    "invoice_pages": [
+                        SimpleUploadedFile("main.pdf", sample_pdf_bytes("Page 1"), content_type="application/pdf"),
+                        SimpleUploadedFile("page-2.pdf", sample_pdf_bytes("Page 2"), content_type="application/pdf"),
+                        SimpleUploadedFile("page-3.pdf", sample_pdf_bytes("Page 3"), content_type="application/pdf"),
+                    ],
+                },
+            )
+
+            self.assertEqual(response.status_code, 302)
+            invoice = Invoice.objects.get(invoice_number="INV-MULTI")
+            self.assertEqual(invoice.attachments.count(), 2)
+            detail_response = self.client.get(invoice.get_absolute_url())
+            preview_response = self.client.get(f"/invoices/{invoice.pk}/file/preview/")
+
+        merged_pdf = PdfReader(BytesIO(preview_response.content))
+        self.assertContains(detail_response, "Preview combined invoice")
+        self.assertContains(detail_response, "Page 1")
+        self.assertContains(detail_response, "Page 2")
+        self.assertContains(detail_response, "Page 3")
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertEqual(len(merged_pdf.pages), 3)
+        self.assertIn("inline", preview_response["Content-Disposition"])
+        self.assertEqual(preview_response["X-Frame-Options"], "SAMEORIGIN")
+
+    def test_invoice_form_shows_polished_multi_upload_controls(self):
+        self.client.login(username="owner", password="test-pass")
+
+        response = self.client.get("/invoices/add/")
+
+        self.assertContains(response, "Upload Invoice", count=2)
+        self.assertContains(response, "No invoice uploaded yet")
+        self.assertNotContains(response, "Select all pages together")
+        self.assertNotContains(response, "Select one or more pages")
+        self.assertContains(response, "invoice-upload-card")
+        self.assertContains(response, "data-upload-list")
+        self.assertContains(response, "selectedFiles = selectedFiles.concat")
+        self.assertContains(response, "Page ${index + 1}: ${file.name}")
+        self.assertContains(response, "Remove")
+
+    def test_invoice_edit_upload_adds_pages_without_deleting_existing_pages(self):
+        self.client.login(username="owner", password="test-pass")
+        with override_settings(MEDIA_ROOT=self.temp_media.name):
+            invoice = Invoice.objects.create(
+                user=self.user,
+                supplier=self.supplier,
+                invoice_date=timezone.localdate(),
+                invoice_number="INV-ADD-PAGES",
+                invoice_file=SimpleUploadedFile("page-1.pdf", sample_pdf_bytes("Page 1"), content_type="application/pdf"),
+                entered_by="Ridoy",
+            )
+
+            edit_response = self.client.get(f"/invoices/{invoice.pk}/edit/")
+            response = self.client.post(
+                f"/invoices/{invoice.pk}/edit/",
+                {
+                    "supplier": self.supplier.pk,
+                    "invoice_date": timezone.localdate().isoformat(),
+                    "invoice_number": "INV-ADD-PAGES",
+                    "entered_by": "Ridoy",
+                    "invoice_pages": [
+                        SimpleUploadedFile("page-2.pdf", sample_pdf_bytes("Page 2"), content_type="application/pdf"),
+                        SimpleUploadedFile("page-3.pdf", sample_pdf_bytes("Page 3"), content_type="application/pdf"),
+                    ],
+                },
+            )
+            invoice.refresh_from_db()
+            preview_response = self.client.get(f"/invoices/{invoice.pk}/file/preview/")
+
+        merged_pdf = PdfReader(BytesIO(preview_response.content))
+        self.assertContains(edit_response, "Upload Invoice")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("page-1", invoice.invoice_file.name)
+        self.assertEqual(invoice.attachments.count(), 2)
+        self.assertEqual(len(merged_pdf.pages), 3)
+
+    def test_invoice_edit_can_replace_and_delete_extra_files(self):
+        self.client.login(username="owner", password="test-pass")
+        with override_settings(MEDIA_ROOT=self.temp_media.name):
+            invoice = Invoice.objects.create(
+                user=self.user,
+                supplier=self.supplier,
+                invoice_date=timezone.localdate(),
+                invoice_number="INV-EDIT-FILES",
+                invoice_file=SimpleUploadedFile("main.pdf", b"%PDF-1.4\nmain", content_type="application/pdf"),
+                entered_by="Ridoy",
+            )
+            replace_attachment = InvoiceAttachment.objects.create(
+                invoice=invoice,
+                file=SimpleUploadedFile("old-page.jpg", b"old", content_type="image/jpeg"),
+                uploaded_by=self.user,
+            )
+            delete_attachment = InvoiceAttachment.objects.create(
+                invoice=invoice,
+                file=SimpleUploadedFile("delete-page.jpg", b"delete", content_type="image/jpeg"),
+                uploaded_by=self.user,
+            )
+
+            edit_response = self.client.get(f"/invoices/{invoice.pk}/edit/")
+
+            response = self.client.post(
+                f"/invoices/{invoice.pk}/edit/",
+                {
+                    "supplier": self.supplier.pk,
+                    "invoice_date": timezone.localdate().isoformat(),
+                    "invoice_number": "INV-EDIT-FILES",
+                    "entered_by": "Ridoy",
+                    f"replace_attachment_{replace_attachment.pk}": SimpleUploadedFile(
+                        "new-page.jpg",
+                        b"new",
+                        content_type="image/jpeg",
+                    ),
+                    "delete_attachments": [str(delete_attachment.pk)],
+                },
+            )
+
+            self.assertEqual(response.status_code, 302)
+            invoice.refresh_from_db()
+            replace_attachment.refresh_from_db()
+
+        self.assertContains(edit_response, "Current invoice pages")
+        self.assertContains(edit_response, "Preview combined PDF")
+        self.assertContains(edit_response, "Change file")
+        self.assertContains(edit_response, "Delete this file")
+        self.assertEqual(invoice.attachments.count(), 1)
+        self.assertIn("new-page", replace_attachment.filename)
+        self.assertFalse(InvoiceAttachment.objects.filter(pk=delete_attachment.pk).exists())
 
 
 class EndOfDayFileUploadTests(TestCase):
@@ -685,6 +824,12 @@ class ReturnLinkTests(TestCase):
         response = self.client.get("/invoices/add/?next=https://example.com/bad")
 
         self.assertContains(response, 'href="/invoices/"')
+
+    def test_logged_in_account_name_shows_next_to_logout(self):
+        response = self.client.get("/dashboard/")
+
+        self.assertContains(response, "owner")
+        self.assertContains(response, "Logout")
 
 
 class EndOfDayArchiveTests(TestCase):

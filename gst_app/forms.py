@@ -53,6 +53,21 @@ class DateInput(forms.DateInput):
         super().__init__(attrs=attrs, format="%Y-%m-%d")
 
 
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    widget = MultipleFileInput
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            return [single_file_clean(item, initial) for item in data]
+        cleaned = single_file_clean(data, initial)
+        return [cleaned] if cleaned else []
+
+
 class SignupForm(UserCreationForm):
     email = forms.EmailField(required=False)
 
@@ -79,13 +94,20 @@ def suppliers_for_user(user):
 
 
 class InvoiceForm(forms.ModelForm):
+    invoice_pages = MultipleFileField(
+        required=False,
+        label="Upload Invoice",
+        help_text="",
+        widget=MultipleFileInput(attrs={"accept": ".pdf,.png,.jpg,.jpeg,.gif,.webp"}),
+    )
+
     class Meta:
         model = Invoice
         fields = (
             "supplier",
             "invoice_date",
             "invoice_number",
-            "invoice_file",
+            "invoice_pages",
             "entered_by",
             "invoice_amount",
             "notes",
@@ -101,18 +123,17 @@ class InvoiceForm(forms.ModelForm):
         today = timezone.localdate()
         self.fields["invoice_date"].initial = (self.instance.invoice_date if self.instance.pk else today).isoformat()
         self.fields["invoice_date"].widget.attrs.update({"min": today.isoformat(), "max": today.isoformat()})
+        self.fields["invoice_pages"].required = not bool(self.instance.pk and self.instance.invoice_file)
         if user is not None:
             self.fields["supplier"].queryset = suppliers_for_user(user)
 
-    def clean_invoice_date(self):
-        invoice_date = self.cleaned_data["invoice_date"]
-        today = timezone.localdate()
-        if invoice_date != today:
-            raise forms.ValidationError("Invoice date must be today's date.")
-        return invoice_date
-
     def clean(self):
         cleaned = super().clean()
+        invoice_pages = cleaned.get("invoice_pages") or []
+        if not self.instance.pk and not invoice_pages:
+            self.add_error("invoice_pages", "Upload at least one invoice page.")
+        if self.instance.pk and not self.instance.invoice_file and not invoice_pages:
+            self.add_error("invoice_pages", "Upload at least one invoice page.")
         supplier = cleaned.get("supplier")
         invoice_number = cleaned.get("invoice_number")
         if self.user and supplier and invoice_number:
@@ -127,6 +148,12 @@ class InvoiceForm(forms.ModelForm):
                 self.add_error("invoice_number", "This invoice number already exists for this supplier.")
         return cleaned
 
+    def clean_invoice_date(self):
+        invoice_date = self.cleaned_data["invoice_date"]
+        today = timezone.localdate()
+        if invoice_date != today:
+            raise forms.ValidationError("Invoice date must be today's date.")
+        return invoice_date
 
 class EndOfDayForm(forms.ModelForm):
     money_fields = END_OF_DAY_MONEY_FIELDS
