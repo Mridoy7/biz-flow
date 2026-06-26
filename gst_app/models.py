@@ -229,6 +229,8 @@ class EndOfDay(TimestampedModel):
     fuel_dip_6_value = models.DecimalField(max_digits=12, decimal_places=2, default=MONEY_ZERO)
     master_sheet_file = models.FileField(upload_to="end-of-day/master-sheets/%Y/%m/", blank=True)
     end_of_days_file = models.FileField(upload_to="end-of-day/end-of-days/%Y/%m/", blank=True)
+    delivery_docket_file = models.FileField(upload_to="end-of-day/delivery-dockets/%Y/%m/", blank=True)
+    is_submitted = models.BooleanField(default=False)
     note = models.TextField(blank=True)
     archived_at = models.DateTimeField(blank=True, null=True)
     archived_by = models.ForeignKey(
@@ -277,7 +279,7 @@ class EndOfDay(TimestampedModel):
     @property
     def fuel_dip_items(self):
         return [
-            (getattr(self, f"fuel_dip_{index}_name", "").strip() or f"Fuel dip {index}", getattr(self, f"fuel_dip_{index}_value"))
+            (getattr(self, f"fuel_dip_{index}_name", "").strip() or f"Fuel Tank {index}", getattr(self, f"fuel_dip_{index}_value"))
             for index in range(1, 7)
         ]
 
@@ -320,6 +322,10 @@ class EndOfDay(TimestampedModel):
     @property
     def end_of_days_is_previewable(self):
         return self.file_is_previewable("end_of_days_file")
+
+    @property
+    def delivery_docket_is_previewable(self):
+        return self.file_is_previewable("delivery_docket_file")
 
     def archive(self, user):
         self.archived_at = timezone.now()

@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
@@ -44,6 +46,14 @@ END_OF_DAY_FUEL_DIP_FIELDS = [
     "fuel_dip_6_name",
     "fuel_dip_6_value",
 ]
+
+
+def endofday_date_bounds(now=None):
+    """Allow a previous-business-day entry only until 4am local time."""
+    local_now = timezone.localtime(now or timezone.now())
+    latest = local_now.date()
+    earliest = latest - timedelta(days=1) if local_now.hour < 4 else latest
+    return earliest, latest
 
 
 class DateInput(forms.DateInput):
@@ -169,6 +179,7 @@ class EndOfDayForm(forms.ModelForm):
             *END_OF_DAY_FUEL_DIP_FIELDS,
             "master_sheet_file",
             "end_of_days_file",
+            "delivery_docket_file",
             "note",
         )
         widgets = {
@@ -176,12 +187,13 @@ class EndOfDayForm(forms.ModelForm):
             "note": forms.Textarea(attrs={"rows": 3}),
         }
 
-    def __init__(self, *args, user=None, **kwargs):
+    def __init__(self, *args, user=None, submission_mode=True, **kwargs):
         self.user = user
+        self.submission_mode = submission_mode
         super().__init__(*args, **kwargs)
-        today = timezone.localdate()
-        self.fields["date"].initial = (self.instance.date if self.instance.pk else today).isoformat()
-        self.fields["date"].widget.attrs.update({"min": today.isoformat(), "max": today.isoformat()})
+        earliest_date, latest_date = endofday_date_bounds()
+        self.fields["date"].initial = (self.instance.date if self.instance.pk else latest_date).isoformat()
+        self.fields["date"].widget.attrs.update({"min": earliest_date.isoformat(), "max": latest_date.isoformat()})
         for field in self.money_fields:
             self.fields[field].required = False
             self.fields[field].widget.attrs.update({"step": "0.01", "min": "0"})
@@ -190,39 +202,44 @@ class EndOfDayForm(forms.ModelForm):
         for index in range(1, 7):
             name_field = f"fuel_dip_{index}_name"
             value_field = f"fuel_dip_{index}_value"
-            self.fields[name_field].label = f"Fuel dip {index}"
-            self.fields[name_field].widget.attrs.update({"placeholder": "E85 tank 1"})
-            self.fields[value_field].label = f"Dip value {index}"
+            self.fields[name_field].label = f"Fuel Tank {index}"
+            self.fields[name_field].widget.attrs.update({"placeholder": "Fuel grade"})
+            self.fields[value_field].label = f"Tank {index} dip value"
             self.fields[value_field].widget.attrs.update({"step": "0.01", "min": "0", "placeholder": "0.00"})
         self.fields["vault_drop"].label = "Vault Drop / Cash Drop"
         self.fields["total_sales"].label = "Terminal Total"
         self.fields["master_sheet_file"].label = "Master Sheet"
         self.fields["end_of_days_file"].label = "End Of Days"
-        for field in ("master_sheet_file", "end_of_days_file"):
-            self.fields[field].required = not bool(self.instance.pk and getattr(self.instance, field))
+        self.fields["delivery_docket_file"].label = "Delivery Docket"
+        for field in ("master_sheet_file", "end_of_days_file", "delivery_docket_file"):
+            self.fields[field].required = self.submission_mode and field != "delivery_docket_file" and not bool(self.instance.pk and getattr(self.instance, field))
             self.fields[field].help_text = "Upload a PDF, image, Word, or Excel file. Multi-page PDFs are supported."
             self.fields[field].widget.attrs.update({"accept": ".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx"})
         self.fields["gross_shop_sales"].widget.attrs.update({"readonly": "readonly"})
-        self.fields["ezy_pin"].required = True
-        self.fields["less_surcharge"].required = True
+        self.fields["ezy_pin"].required = self.submission_mode
+        self.fields["less_surcharge"].required = self.submission_mode
+        if not self.submission_mode:
+            self.fields["entered_by"].required = False
+            for field in self.fuel_dip_fields:
+                self.fields[field].required = False
 
     def clean(self):
         cleaned = super().clean()
-        if self.data.get(self.add_prefix("ezy_pin"), "").strip() == "":
+        if self.submission_mode and self.data.get(self.add_prefix("ezy_pin"), "").strip() == "":
             self.add_error("ezy_pin", "EZY Pin is required. Enter 0 if there was no EZY Pin value.")
-        if self.data.get(self.add_prefix("less_surcharge"), "").strip() == "":
+        if self.submission_mode and self.data.get(self.add_prefix("less_surcharge"), "").strip() == "":
             self.add_error("less_surcharge", "Less Surcharge is required. Enter 0 if there was no surcharge value.")
         for field in self.money_fields:
             if cleaned.get(field) in (None, ""):
                 cleaned[field] = 0
         for field in self.fuel_dip_fields:
-            if cleaned.get(field) in (None, ""):
+            if self.submission_mode and cleaned.get(field) in (None, ""):
                 self.add_error(field, f"{self.fields[field].label} is required.")
 
         date = cleaned.get("date")
-        today = timezone.localdate()
-        if date and date != today:
-            self.add_error("date", "End of Day date must be today's date.")
+        earliest_date, latest_date = endofday_date_bounds()
+        if date and not earliest_date <= date <= latest_date:
+            self.add_error("date", "End of Day date must be today, or yesterday before 4am.")
         if self.user and date:
             qs = EndOfDay.objects.filter(site=user_site(self.user), date=date, archived_at__isnull=True)
             if self.instance.pk:

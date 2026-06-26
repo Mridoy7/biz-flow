@@ -56,7 +56,7 @@ def owned_or_all(queryset, user):
 def home(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
-    return render(request, "gst_app/home.html")
+    return redirect("login")
 
 
 def signup(request):
@@ -322,6 +322,8 @@ def endofday_uploaded_file(record, file_kind):
         return record.master_sheet_file, "Master Sheet"
     if file_kind == "end-of-days":
         return record.end_of_days_file, "End Of Days"
+    if file_kind == "delivery-docket":
+        return record.delivery_docket_file, "Delivery Docket"
     raise Http404("Unknown End of Day file.")
 
 
@@ -376,24 +378,37 @@ def endofday_form(request, pk=None):
         "entered_by",
         "master_sheet_file",
         "end_of_days_file",
+        "delivery_docket_file",
         "note",
     ]
     before = snapshot_instance(record, audited_fields) if record else {}
     if request.method == "POST":
-        form = EndOfDayForm(request.POST, request.FILES, instance=record, user=request.user)
+        is_submitting = request.POST.get("action") == "submit" or bool(record and record.is_submitted)
+        form = EndOfDayForm(
+            request.POST,
+            request.FILES,
+            instance=record,
+            user=request.user,
+            submission_mode=is_submitting,
+        )
         if form.is_valid():
             saved = form.save(commit=False)
             if not saved.pk:
                 saved.user = request.user
             if not saved.site_id:
                 saved.site = user_site(request.user)
-            saved.full_clean()
+            saved.is_submitted = is_submitting
+            if is_submitting:
+                saved.full_clean()
             saved.save()
             write_audit_logs(request.user, saved, before, audited_fields)
-            messages.success(request, "End of Day saved. PDF is ready to download.")
+            if is_submitting:
+                messages.success(request, "End of Day submitted. PDF is ready to preview.")
+            else:
+                messages.success(request, "End of Day draft saved. You can return and submit it later.")
             return redirect(saved)
     else:
-        form = EndOfDayForm(instance=record, user=request.user)
+        form = EndOfDayForm(instance=record, user=request.user, submission_mode=bool(record and record.is_submitted))
     return render(request, "gst_app/endofday_form.html", {"form": form, "record": record, "cancel_url": cancel_url})
 
 
@@ -497,18 +512,18 @@ def endofday_export(request, filetype):
         "Vault Drop / Cash Drop",
         "Terminal Total",
         "Total Fuel Sales",
-        "Fuel Dip 1",
-        "Dip Value 1",
-        "Fuel Dip 2",
-        "Dip Value 2",
-        "Fuel Dip 3",
-        "Dip Value 3",
-        "Fuel Dip 4",
-        "Dip Value 4",
-        "Fuel Dip 5",
-        "Dip Value 5",
-        "Fuel Dip 6",
-        "Dip Value 6",
+        "Fuel Tank 1",
+        "Tank 1 Dip Value",
+        "Fuel Tank 2",
+        "Tank 2 Dip Value",
+        "Fuel Tank 3",
+        "Tank 3 Dip Value",
+        "Fuel Tank 4",
+        "Tank 4 Dip Value",
+        "Fuel Tank 5",
+        "Tank 5 Dip Value",
+        "Fuel Tank 6",
+        "Tank 6 Dip Value",
         "Gross Shop Sales",
         "Total sales",
         "Difference",

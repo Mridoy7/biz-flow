@@ -3,7 +3,7 @@
 {% block title %}End of Day {{ record.date }}{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1 class="h3 mb-0">End of Day {{ record.date }}</h1>
+  <h1 class="h3 mb-0">End of Day {{ record.date }}{% if not record.is_submitted %} <span class="badge text-bg-secondary">Draft</span>{% endif %}</h1>
   <div class="action-row">
     {% if can_manage_dayend %}
       <a class="btn btn-outline-primary" href="{% url 'endofday_edit' record.pk %}">Edit</a>
@@ -70,6 +70,11 @@
       <button class="btn btn-sm btn-outline-success endofday-file-preview-button" type="button" data-preview-url="{% url 'endofday_file_preview' record.pk 'end-of-days' %}" data-download-url="{% url 'endofday_file_download' record.pk 'end-of-days' %}" data-previewable="{% if record.end_of_days_is_previewable %}1{% else %}0{% endif %}" data-file-label="End Of Days">End Of Days</button>
     {% else %}
       <span class="text-secondary">No End Of Days uploaded.</span>
+    {% endif %}
+    {% if record.delivery_docket_file %}
+      <button class="btn btn-sm btn-outline-success endofday-file-preview-button" type="button" data-preview-url="{% url 'endofday_file_preview' record.pk 'delivery-docket' %}" data-download-url="{% url 'endofday_file_download' record.pk 'delivery-docket' %}" data-previewable="{% if record.delivery_docket_is_previewable %}1{% else %}0{% endif %}" data-file-label="Delivery Docket">Delivery Docket</button>
+    {% else %}
+      <span class="text-secondary">No Delivery Docket uploaded.</span>
     {% endif %}
   </div>
 </section>

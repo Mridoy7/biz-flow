@@ -1,8 +1,8 @@
-from datetime import date
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from io import BytesIO
 import tempfile
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -12,7 +12,7 @@ from django.utils import timezone
 from pypdf import PdfReader
 from reportlab.pdfgen import canvas
 
-from .forms import EndOfDayForm, InvoiceForm
+from .forms import EndOfDayForm, InvoiceForm, endofday_date_bounds
 from .models import AccountRole, EndOfDay, Invoice, InvoiceAttachment, StoreSite, Supplier
 from .pdf import endofday_daysheet_rows, endofday_fuel_dip_rows
 
@@ -24,6 +24,13 @@ def sample_pdf_bytes(text="Uploaded page"):
     pdf.showPage()
     pdf.save()
     return buffer.getvalue()
+
+
+class HomeRedirectTests(TestCase):
+    def test_signed_out_home_redirects_to_login(self):
+        response = self.client.get("/")
+
+        self.assertRedirects(response, "/accounts/login/")
 
 
 class EndOfDayCalculationTests(TestCase):
@@ -177,15 +184,36 @@ class SameDayFormValidationTests(TestCase):
         self.assertIn("This invoice number already exists for this supplier.", form.errors["invoice_number"])
 
     def test_endofday_form_rejects_previous_day(self):
-        yesterday = timezone.localdate() - timedelta(days=1)
+        today = timezone.localdate()
+        yesterday = today - timedelta(days=1)
+        after_cutoff = timezone.make_aware(datetime.combine(today, time(5, 0)))
+        with patch("gst_app.forms.timezone.now", return_value=after_cutoff):
+            form = EndOfDayForm(
+                data=self.endofday_required_data(date=yesterday.isoformat()),
+                files=self.endofday_required_files(),
+                user=self.user,
+            )
+            self.assertFalse(form.is_valid())
+            self.assertIn("End of Day date must be today, or yesterday before 4am.", form.errors["date"])
+
+    def test_endofday_draft_allows_incomplete_day_sheet(self):
         form = EndOfDayForm(
-            data=self.endofday_required_data(date=yesterday.isoformat()),
-            files=self.endofday_required_files(),
+            data={"date": timezone.localdate().isoformat()},
             user=self.user,
+            submission_mode=False,
         )
 
-        self.assertFalse(form.is_valid())
-        self.assertIn("End of Day date must be today's date.", form.errors["date"])
+        self.assertTrue(form.is_valid(), form.errors)
+
+    @override_settings(TIME_ZONE="Australia/Darwin")
+    def test_endofday_date_allows_yesterday_before_4am(self):
+        at_one_am = timezone.make_aware(datetime(2026, 6, 27, 1, 0))
+        at_four_am = timezone.make_aware(datetime(2026, 6, 27, 4, 0))
+
+        with patch("gst_app.forms.timezone.now", return_value=at_one_am):
+            self.assertEqual(endofday_date_bounds(), (date(2026, 6, 26), date(2026, 6, 27)))
+        with patch("gst_app.forms.timezone.now", return_value=at_four_am):
+            self.assertEqual(endofday_date_bounds(), (date(2026, 6, 27), date(2026, 6, 27)))
 
     def test_endofday_form_accepts_site_name(self):
         form = EndOfDayForm(
@@ -212,10 +240,11 @@ class SameDayFormValidationTests(TestCase):
         form = EndOfDayForm(user=self.user)
 
         self.assertEqual(form.fields["total_sales"].label, "Terminal Total")
-        self.assertEqual(form.fields["fuel_dip_1_name"].label, "Fuel dip 1")
-        self.assertEqual(form.fields["fuel_dip_1_value"].label, "Dip value 1")
-        self.assertEqual(form.fields["fuel_dip_6_name"].label, "Fuel dip 6")
-        self.assertEqual(form.fields["fuel_dip_6_value"].label, "Dip value 6")
+        self.assertEqual(form.fields["fuel_dip_1_name"].label, "Fuel Tank 1")
+        self.assertEqual(form.fields["fuel_dip_1_name"].widget.attrs["placeholder"], "Fuel grade")
+        self.assertEqual(form.fields["fuel_dip_1_value"].label, "Tank 1 dip value")
+        self.assertEqual(form.fields["fuel_dip_6_name"].label, "Fuel Tank 6")
+        self.assertEqual(form.fields["fuel_dip_6_value"].label, "Tank 6 dip value")
         self.assertTrue(form.fields["fuel_dip_1_name"].required)
         self.assertTrue(form.fields["fuel_dip_6_value"].required)
         self.assertTrue(form.fields["master_sheet_file"].required)
@@ -506,6 +535,24 @@ class EndOfDayFileUploadTests(TestCase):
             self.assertTrue(record.master_sheet_file.name.endswith(".pdf"))
             self.assertTrue(record.end_of_days_file.name.endswith(".docx"))
 
+    def test_endofday_draft_saves_delivery_docket_without_final_documents(self):
+        delivery_docket = SimpleUploadedFile("delivery-docket.pdf", b"%PDF-1.4\ndocket", content_type="application/pdf")
+
+        with override_settings(MEDIA_ROOT=self.temp_media.name):
+            response = self.client.post(
+                "/end-of-day/add/",
+                {
+                    "date": timezone.localdate().isoformat(),
+                    "action": "save_draft",
+                    "delivery_docket_file": delivery_docket,
+                },
+            )
+
+            self.assertEqual(response.status_code, 302)
+            record = EndOfDay.objects.get(user=self.user, date=timezone.localdate())
+            self.assertFalse(record.is_submitted)
+            self.assertTrue(record.delivery_docket_file.name.endswith(".pdf"))
+
     def test_endofday_detail_previews_uploaded_files_before_download(self):
         with override_settings(MEDIA_ROOT=self.temp_media.name):
             record = EndOfDay.objects.create(
@@ -544,10 +591,19 @@ class EndOfDayFileUploadTests(TestCase):
         self.assertContains(response, 'enctype="multipart/form-data"')
         self.assertContains(response, "Master Sheet")
         self.assertContains(response, "End Of Days")
+        self.assertContains(response, "Delivery Docket")
         self.assertContains(response, "No file uploaded yet")
         self.assertContains(response, "Upload file")
         self.assertContains(response, "upload-card")
         self.assertContains(response, ".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx")
+
+    def test_endofday_form_has_draft_and_submit_actions(self):
+        response = self.client.get("/end-of-day/add/")
+
+        self.assertContains(response, "Save Draft")
+        self.assertContains(response, 'name="action" value="save_draft"')
+        self.assertContains(response, "Submit")
+        self.assertContains(response, 'name="action" value="submit"')
 
     def test_endofday_edit_form_shows_current_uploads_can_be_changed(self):
         with override_settings(MEDIA_ROOT=self.temp_media.name):
@@ -978,7 +1034,7 @@ class EndOfDayReportExportTests(TestCase):
 
         response = self.client.get("/end-of-day/export/csv/")
 
-        self.assertContains(response, "Fuel Dip 1,Dip Value 1,Fuel Dip 2,Dip Value 2")
+        self.assertContains(response, "Fuel Tank 1,Tank 1 Dip Value,Fuel Tank 2,Tank 2 Dip Value")
         self.assertContains(response, "E85 tank 1,100.00,Unleaded 91 tank 1,200.00")
         self.assertContains(response, "Diesel tank 2,600.00")
 

@@ -375,6 +375,12 @@ a:hover {
   max-width: 960px;
 }
 
+.form-submit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .stacked-form {
   display: grid;
   gap: 14px;
