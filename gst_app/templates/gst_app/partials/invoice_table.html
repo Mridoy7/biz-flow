@@ -1,23 +1,24 @@
 {% load gst_extras %}
 <div class="table-responsive">
   <table class="table align-middle">
-    <thead><tr><th>Supplier</th><th>Date</th><th>Invoice #</th><th>Amount</th><th></th></tr></thead>
+    <thead><tr><th>Type</th><th>Supplier / Purchase</th><th>Date</th><th>Invoice #</th><th>Amount</th><th></th></tr></thead>
     <tbody>
       {% for invoice in invoices %}
         <tr>
-          <td>{{ invoice.supplier.name }}</td>
+          <td><span class="badge text-bg-light border">{{ invoice.get_record_type_display }}</span></td>
+          <td>{{ invoice.display_name }}</td>
           <td>{{ invoice.invoice_date }}</td>
-          <td>{{ invoice.invoice_number }}</td>
+          <td>{{ invoice.document_number }}</td>
           <td>{% if invoice.invoice_amount %}{{ invoice.invoice_amount|currency }}{% else %}-{% endif %}</td>
           <td class="text-end">
             <a class="btn btn-sm btn-outline-primary" href="{% url 'invoice_detail' invoice.pk %}">View</a>
             {% if not compact %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'invoice_edit' invoice.pk %}">Edit</a>{% endif %}
             {% if not compact %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'invoice_pdf' invoice.pk %}">PDF</a>{% endif %}
-            {% if not compact %}<a class="btn btn-sm btn-outline-success invoice-preview-button" href="{% url 'invoice_file_preview' invoice.pk %}" data-preview-url="{% url 'invoice_file_preview' invoice.pk %}" data-download-url="{% url 'invoice_file_download' invoice.pk %}" data-previewable="{% if invoice.original_invoice_is_previewable %}1{% else %}0{% endif %}" data-invoice-label="{{ invoice.supplier.name }} - {{ invoice.invoice_number }}">Invoice PDF</a>{% endif %}
+            {% if not compact %}<a class="btn btn-sm btn-outline-success invoice-preview-button" href="{% url 'invoice_file_preview' invoice.pk %}" data-preview-url="{% url 'invoice_file_preview' invoice.pk %}" data-download-url="{% url 'invoice_file_download' invoice.pk %}" data-previewable="{% if invoice.original_invoice_is_previewable %}1{% else %}0{% endif %}" data-invoice-label="{{ invoice.display_name }} - {{ invoice.document_number }}">Invoice PDF</a>{% endif %}
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="5">No invoices found.</td></tr>
+        <tr><td colspan="6">No invoices found.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -40,11 +40,6 @@
                 <th>Entered By</th>
                 <th class="text-end">Cash</th>
                 <th class="text-end">Vault Drop / Cash Drop</th>
-                <th class="text-end">Terminal Total</th>
-                <th>Fuel Tank 1</th>
-                <th class="text-end">Tank 1 Dip</th>
-                <th>Fuel Tank 2</th>
-                <th class="text-end">Tank 2 Dip</th>
                 <th class="text-end">Net Shop Sales</th>
               </tr>
             </thead>
@@ -56,15 +51,10 @@
                   <td>{{ record.entered_by }}</td>
                   <td class="text-end">{{ record.cash|currency }}</td>
                   <td class="text-end">{{ record.vault_drop|currency }}</td>
-                  <td class="text-end">{{ record.total_sales_with_payments|currency }}</td>
-                  <td>{{ record.fuel_dip_1_name|default:"-" }}</td>
-                  <td class="text-end">{{ record.fuel_dip_1_value|floatformat:2 }}</td>
-                  <td>{{ record.fuel_dip_2_name|default:"-" }}</td>
-                  <td class="text-end">{{ record.fuel_dip_2_value|floatformat:2 }}</td>
                   <td class="text-end">{{ record.net_shop_sales|currency }}</td>
                 </tr>
               {% empty %}
-                <tr><td colspan="11">No End of Day records found.</td></tr>
+                <tr><td colspan="6">No End of Day records found.</td></tr>
               {% endfor %}
             </tbody>
           </table>

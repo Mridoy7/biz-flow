@@ -10,7 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
 def money(value):
@@ -60,9 +60,10 @@ def pdf_response(filename, title, sections, as_attachment=False, subtitle=None):
 def invoice_pdf(invoice):
     rows = [
         ["Field", "Value"],
-        ["Supplier", invoice.supplier.name],
+        ["Type", invoice.get_record_type_display()],
+        ["Purchase From" if invoice.is_cash_purchase else "Supplier", invoice.display_name],
         ["Invoice Date", invoice.invoice_date],
-        ["Invoice Number", invoice.invoice_number],
+        ["Receipt / Invoice Number" if invoice.is_cash_purchase else "Invoice Number", invoice.document_number],
         ["Entered By", invoice.entered_by],
         ["Amount", money(invoice.invoice_amount) if invoice.invoice_amount is not None else "Not entered"],
         ["Notes", invoice.notes or "-"],
@@ -70,36 +71,17 @@ def invoice_pdf(invoice):
         ["Created", invoice.created_at],
         ["Last Edited", invoice.updated_at],
     ]
-    return pdf_response(f"invoice-{invoice.pk}.pdf", f"Invoice {invoice.invoice_number}", [("Invoice Details", rows)])
+    title = f"{invoice.get_record_type_display()} {invoice.document_number}"
+    return pdf_response(f"invoice-{invoice.pk}.pdf", title, [("Invoice Details", rows)])
 
 
 def endofday_daysheet_rows(record):
     return [
         ("Date", record.date.strftime("%d/%m/%Y")),
-        ("Uber Eats", record.uber_eats),
-        ("Door Dash", record.doordash),
-        ("Motorpass", record.motorpass),
-        ("Motorcharge", record.motorcharge),
-        ("Fleet", record.fleet_card),
-        ("Eftpos", record.eftpos),
-        ("Amex", record.amex_card),
-        ("Diners", record.diners_card),
-        ("United Cards", record.united_card),
-        ("Store Value Charge", record.store_value_charge),
-        ("IOU", record.iou),
-        ("Driveoffs", record.drive_offs),
-        ("IOU Payment", record.iou_payment),
-        ("Drive Off Payment", record.drive_off_payment),
+        ("Site Name", record.site_name or "-"),
+        ("Entered By", record.entered_by),
         ("Cash", record.cash),
         ("Vault Drop / Cash Drop", record.vault_drop),
-        ("Total sales", record.total_value),
-        ("Terminal Total", record.total_sales_with_payments),
-        ("Difference", record.difference),
-        ("Total Fuel Sales", record.total_fuel_sales),
-        ("Gross Shopsales", record.gross_shop_sales),
-        ("Less: Surcharge", record.less_surcharge),
-        ("Less: BBQ", Decimal("0.00")),
-        ("Less: Ezypin", record.ezy_pin),
         ("Net Shop Sales", record.net_shop_sales),
     ]
 
@@ -255,22 +237,10 @@ def endofday_pdf(record, as_attachment=False):
         Spacer(1, 10),
     ]
 
-    summary_rows = ["Total sales", "Terminal Total", "Difference"]
-    shop_rows = ["Total Fuel Sales", "Gross Shopsales", "Less: Surcharge", "Less: BBQ", "Less: Ezypin", "Net Shop Sales"]
-    story.append(styled_daysheet_table(endofday_daysheet_rows(record), bold_labels=summary_rows, pale_labels=shop_rows, red_labels=["Net Shop Sales"]))
+    story.append(styled_daysheet_table(endofday_daysheet_rows(record), bold_labels=["Net Shop Sales"], red_labels=["Net Shop Sales"]))
 
     if record.note:
         story.extend([Spacer(1, 10), Paragraph(f"Note: {record.note}", styles["Normal"])])
-
-    story.extend(
-        [
-            PageBreak(),
-            Paragraph("Fuel Dips", styles["Title"]),
-            Paragraph(f"Date: {record.date:%d/%m/%Y}", styles["Normal"]),
-            Spacer(1, 10),
-            styled_daysheet_table(endofday_fuel_dip_rows(record), pale_labels=[label for label, value in endofday_fuel_dip_rows(record)]),
-        ]
-    )
 
     doc.build(story)
     pdf_bytes = merged_endofday_pdf_bytes(record, buffer.getvalue())

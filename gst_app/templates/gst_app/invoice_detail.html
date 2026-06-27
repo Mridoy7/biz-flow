@@ -1,20 +1,22 @@
 {% extends "gst_app/base.html" %}
 {% load gst_extras %}
-{% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+{% block title %}{{ invoice.get_record_type_display }} {{ invoice.document_number }}{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1 class="h3 mb-0">Invoice {{ invoice.invoice_number }}</h1>
+  <h1 class="h3 mb-0">{{ invoice.get_record_type_display }} {{ invoice.document_number }}</h1>
   <div class="action-row">
     <a class="btn btn-outline-primary" href="{% url 'invoice_edit' invoice.pk %}">Edit</a>
     <a class="btn btn-outline-secondary" href="{% url 'invoice_pdf' invoice.pk %}">Preview PDF</a>
   </div>
 </div>
 <dl class="detail-list">
-  <dt>Supplier</dt><dd>{{ invoice.supplier.name }}</dd>
+  <dt>Type</dt><dd>{{ invoice.get_record_type_display }}</dd>
+  <dt>{% if invoice.is_cash_purchase %}Purchase From{% else %}Supplier{% endif %}</dt><dd>{{ invoice.display_name }}</dd>
+  <dt>{% if invoice.is_cash_purchase %}Receipt / Invoice Number{% else %}Invoice Number{% endif %}</dt><dd>{{ invoice.document_number }}</dd>
   <dt>Date</dt><dd>{{ invoice.invoice_date }}</dd>
   <dt>Entered By</dt><dd>{{ invoice.entered_by }}</dd>
   <dt>Amount</dt><dd>{% if invoice.invoice_amount %}{{ invoice.invoice_amount|currency }}{% else %}Not entered{% endif %}</dd>
-  <dt>Invoice PDF</dt><dd><button class="btn btn-sm btn-outline-success invoice-preview-button" type="button" data-preview-url="{% url 'invoice_file_preview' invoice.pk %}" data-download-url="{% url 'invoice_file_download' invoice.pk %}" data-previewable="{% if invoice.original_invoice_is_previewable %}1{% else %}0{% endif %}" data-invoice-label="{{ invoice.supplier.name }} - {{ invoice.invoice_number }}">Preview combined invoice</button></dd>
+  <dt>Invoice PDF</dt><dd><button class="btn btn-sm btn-outline-success invoice-preview-button" type="button" data-preview-url="{% url 'invoice_file_preview' invoice.pk %}" data-download-url="{% url 'invoice_file_download' invoice.pk %}" data-previewable="{% if invoice.original_invoice_is_previewable %}1{% else %}0{% endif %}" data-invoice-label="{{ invoice.display_name }} - {{ invoice.document_number }}">Preview combined invoice</button></dd>
   <dt>Invoice pages</dt>
   <dd>
     <div class="d-flex flex-wrap gap-2">

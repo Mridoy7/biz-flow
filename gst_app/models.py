@@ -116,11 +116,17 @@ class Supplier(TimestampedModel):
 
 
 class Invoice(TimestampedModel):
+    class RecordType(models.TextChoices):
+        SUPPLIER_INVOICE = "supplier_invoice", "Supplier Invoice"
+        CASH_PURCHASE = "cash_purchase", "Cash Purchase"
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="invoices")
     site = models.ForeignKey(StoreSite, blank=True, null=True, on_delete=models.PROTECT, related_name="invoices")
-    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name="invoices")
+    record_type = models.CharField(max_length=24, choices=RecordType.choices, default=RecordType.SUPPLIER_INVOICE)
+    supplier = models.ForeignKey(Supplier, blank=True, null=True, on_delete=models.PROTECT, related_name="invoices")
+    purchase_from = models.CharField(max_length=160, blank=True)
     invoice_date = models.DateField()
-    invoice_number = models.CharField(max_length=120)
+    invoice_number = models.CharField(max_length=120, blank=True)
     invoice_file = models.FileField(upload_to="invoices/%Y/%m/")
     entered_by = models.CharField(max_length=120)
     invoice_amount = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
@@ -136,12 +142,27 @@ class Invoice(TimestampedModel):
         ]
 
     def __str__(self):
-        return f"{self.supplier} - {self.invoice_number}"
+        return f"{self.display_name} - {self.document_number}"
 
     def save(self, *args, **kwargs):
         if not self.site_id:
-            self.site = self.supplier.site or profile_site_for_user(self.user)
+            supplier_site = self.supplier.site if self.supplier_id else None
+            self.site = supplier_site or profile_site_for_user(self.user)
         super().save(*args, **kwargs)
+
+    @property
+    def is_cash_purchase(self):
+        return self.record_type == self.RecordType.CASH_PURCHASE
+
+    @property
+    def display_name(self):
+        if self.is_cash_purchase:
+            return self.purchase_from or "Cash Purchase"
+        return self.supplier.name if self.supplier_id else "-"
+
+    @property
+    def document_number(self):
+        return self.invoice_number or f"CP-{self.pk or 'new'}"
 
     @property
     def original_invoice_is_previewable(self):

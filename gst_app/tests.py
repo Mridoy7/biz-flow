@@ -397,6 +397,39 @@ class InvoiceFileDownloadTests(TestCase):
         self.assertContains(response, "Page ${index + 1}: ${file.name}")
         self.assertContains(response, "Remove")
 
+    def test_cash_purchase_form_accepts_amount_and_multiple_pages(self):
+        self.client.login(username="owner", password="test-pass")
+        with override_settings(MEDIA_ROOT=self.temp_media.name):
+            response = self.client.post(
+                "/invoices/cash-purchase/add/",
+                {
+                    "purchase_from": "Local Hardware",
+                    "invoice_date": timezone.localdate().isoformat(),
+                    "invoice_number": "CASH-1",
+                    "entered_by": "Ridoy",
+                    "invoice_amount": "42.50",
+                    "invoice_pages": [
+                        SimpleUploadedFile("cash-page-1.pdf", sample_pdf_bytes("Cash page 1"), content_type="application/pdf"),
+                        SimpleUploadedFile("cash-page-2.pdf", sample_pdf_bytes("Cash page 2"), content_type="application/pdf"),
+                    ],
+                },
+            )
+
+            self.assertEqual(response.status_code, 302)
+            invoice = Invoice.objects.get(invoice_number="CASH-1")
+            detail_response = self.client.get(invoice.get_absolute_url())
+            preview_response = self.client.get(f"/invoices/{invoice.pk}/file/preview/")
+
+        merged_pdf = PdfReader(BytesIO(preview_response.content))
+        self.assertTrue(invoice.is_cash_purchase)
+        self.assertIsNone(invoice.supplier)
+        self.assertEqual(invoice.purchase_from, "Local Hardware")
+        self.assertEqual(invoice.invoice_amount, Decimal("42.50"))
+        self.assertEqual(invoice.attachments.count(), 1)
+        self.assertContains(detail_response, "Cash Purchase")
+        self.assertContains(detail_response, "Local Hardware")
+        self.assertEqual(len(merged_pdf.pages), 2)
+
     def test_invoice_edit_upload_adds_pages_without_deleting_existing_pages(self):
         self.client.login(username="owner", password="test-pass")
         with override_settings(MEDIA_ROOT=self.temp_media.name):
@@ -664,14 +697,17 @@ class PdfContentTests(TestCase):
         self.assertEqual(rows[0][0], "Date")
         self.assertNotEqual(rows[0], ("", ""))
 
-    def test_endofday_daysheet_includes_store_value_and_payment_rows(self):
+    def test_endofday_daysheet_only_includes_summary_rows(self):
         record = EndOfDay.objects.create(
             user=self.user,
             date=timezone.localdate(),
+            site_name="Holtze",
             entered_by="Ridoy",
             store_value_charge=12,
             iou_payment=7,
             drive_off_payment=3,
+            cash=30,
+            vault_drop=40,
             total_sales=100,
             total_fuel_sales=20,
             ezy_pin=0,
@@ -680,13 +716,13 @@ class PdfContentTests(TestCase):
 
         rows = dict(endofday_daysheet_rows(record))
 
-        self.assertEqual(rows["Store Value Charge"], Decimal("12"))
-        self.assertEqual(rows["IOU Payment"], Decimal("7"))
-        self.assertEqual(rows["Drive Off Payment"], Decimal("3"))
-        self.assertEqual(rows["Total sales"], Decimal("22"))
-        self.assertEqual(rows["Terminal Total"], Decimal("110"))
-        self.assertEqual(rows["Total Fuel Sales"], Decimal("20"))
-        self.assertEqual(rows["Gross Shopsales"], Decimal("90"))
+        self.assertEqual(list(rows), ["Date", "Site Name", "Entered By", "Cash", "Vault Drop / Cash Drop", "Net Shop Sales"])
+        self.assertEqual(rows["Site Name"], "Holtze")
+        self.assertEqual(rows["Entered By"], "Ridoy")
+        self.assertEqual(rows["Cash"], Decimal("30"))
+        self.assertEqual(rows["Vault Drop / Cash Drop"], Decimal("40"))
+        self.assertNotIn("Store Value Charge", rows)
+        self.assertNotIn("Fuel Tank 1", rows)
 
     def test_endofday_fuel_dip_rows_are_separate_from_main_daysheet_rows(self):
         record = EndOfDay.objects.create(
@@ -781,11 +817,12 @@ class PdfContentTests(TestCase):
         self.assertIn("inline", preview_response["Content-Disposition"])
         self.assertIn("attachment", download_response["Content-Disposition"])
 
-    def test_endofday_pdf_adds_fuel_dips_page_and_uploaded_daysheet_pages(self):
+    def test_endofday_pdf_uses_summary_only_and_uploaded_daysheet_pages(self):
         with tempfile.TemporaryDirectory() as temp_media, override_settings(MEDIA_ROOT=temp_media):
             record = EndOfDay.objects.create(
                 user=self.user,
                 date=timezone.localdate(),
+                site_name="Holtze",
                 entered_by="Ridoy",
                 fuel_dip_1_name="E85 tank 1",
                 fuel_dip_1_value=100,
@@ -804,8 +841,12 @@ class PdfContentTests(TestCase):
         reader = PdfReader(BytesIO(response.content))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
 
-        self.assertEqual(len(reader.pages), 4)
-        self.assertIn("Fuel Dips", text)
+        self.assertEqual(len(reader.pages), 3)
+        self.assertIn("Site Name", text)
+        self.assertIn("Holtze", text)
+        self.assertIn("Net Shop Sales", text)
+        self.assertNotIn("Fuel Dips", text)
+        self.assertNotIn("E85 tank 1", text)
         self.assertIn("Master Sheet", text)
         self.assertIn("End Of Days", text)
 
@@ -1010,7 +1051,7 @@ class EndOfDayReportExportTests(TestCase):
         self.assertContains(response, "Cash,Vault Drop / Cash Drop")
         self.assertContains(response, "$25.00,$15.00")
 
-    def test_csv_report_includes_fuel_dips(self):
+    def test_csv_report_excludes_fuel_dips(self):
         EndOfDay.objects.create(
             user=self.user,
             date=timezone.localdate(),
@@ -1034,9 +1075,10 @@ class EndOfDayReportExportTests(TestCase):
 
         response = self.client.get("/end-of-day/export/csv/")
 
-        self.assertContains(response, "Fuel Tank 1,Tank 1 Dip Value,Fuel Tank 2,Tank 2 Dip Value")
-        self.assertContains(response, "E85 tank 1,100.00,Unleaded 91 tank 1,200.00")
-        self.assertContains(response, "Diesel tank 2,600.00")
+        self.assertContains(response, "Date,Site Name,Entered By,Cash,Vault Drop / Cash Drop,Net Shop Sales")
+        self.assertNotContains(response, "Fuel Tank 1")
+        self.assertNotContains(response, "E85 tank 1")
+        self.assertNotContains(response, "Diesel tank 2")
 
 
 class AccountRoleAccessTests(TestCase):

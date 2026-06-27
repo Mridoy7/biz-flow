@@ -13,6 +13,8 @@
     <div class="invoice-form-grid">
       {% for field in form %}
         {% if field.name == "invoice_pages" %}
+        {% elif is_cash_purchase and field.name == "supplier" %}
+        {% elif not is_cash_purchase and field.name == "purchase_from" %}
         {% else %}
           <div class="{% if field.name == 'notes' %}span-2{% endif %}">
             <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
@@ -34,9 +36,9 @@
             <div>
               <div class="upload-current" data-upload-status>
                 {% if invoice_page_count %}
-                  Current invoice has {{ invoice_page_count }} page{% if invoice_page_count != 1 %}s{% endif %}.
+                  Current {% if is_cash_purchase %}cash purchase{% else %}invoice{% endif %} has {{ invoice_page_count }} page{% if invoice_page_count != 1 %}s{% endif %}.
                 {% else %}
-                  No invoice uploaded yet
+                  No {% if is_cash_purchase %}cash purchase invoice{% else %}invoice{% endif %} uploaded yet
                 {% endif %}
               </div>
               {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
@@ -57,14 +59,14 @@
     {% if invoice %}
       <section class="attachment-panel">
         <div class="section-title">
-          <h2 class="h6 mb-0">Current invoice pages</h2>
+          <h2 class="h6 mb-0">Current {% if is_cash_purchase %}cash purchase{% else %}invoice{% endif %} pages</h2>
         </div>
         {% if invoice.invoice_file %}
           <div class="attachment-card">
             <div class="attachment-card-top">
               <div>
                 <strong>Page 1 - {{ invoice.invoice_file|basename }}</strong>
-                <div class="form-text">Use the upload box above to add more pages to this invoice.</div>
+                <div class="form-text">Use the upload box above to add more pages.</div>
               </div>
               <div class="action-row mb-0">
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'invoice_file_preview' invoice.pk %}" target="_blank" rel="noopener">Preview combined PDF</a>
@@ -99,7 +101,7 @@
             </div>
           </div>
         {% empty %}
-          {% if not invoice.invoice_file %}<p class="text-secondary mb-0">No invoice pages uploaded yet.</p>{% endif %}
+          {% if not invoice.invoice_file %}<p class="text-secondary mb-0">No pages uploaded yet.</p>{% endif %}
         {% endfor %}
       </section>
     {% endif %}

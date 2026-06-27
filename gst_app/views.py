@@ -209,21 +209,30 @@ def update_invoice_attachments(request, invoice):
 
 
 @login_required
-def invoice_form(request, pk=None):
+def cash_purchase_form(request):
+    return invoice_form(request, record_type=Invoice.RecordType.CASH_PURCHASE)
+
+
+@login_required
+def invoice_form(request, pk=None, record_type=None):
     invoice = None
     if pk:
         invoice = get_object_or_404(owned_or_all(Invoice.objects.all(), request.user), pk=pk)
+    active_record_type = invoice.record_type if invoice else (record_type or Invoice.RecordType.SUPPLIER_INVOICE)
+    is_cash_purchase = active_record_type == Invoice.RecordType.CASH_PURCHASE
     cancel_url = safe_next_url(request, reverse("invoice_list"))
-    before = snapshot_instance(invoice, ["supplier", "invoice_date", "invoice_number", "entered_by", "invoice_amount", "notes"]) if invoice else {}
+    before = snapshot_instance(invoice, ["record_type", "supplier", "purchase_from", "invoice_date", "invoice_number", "entered_by", "invoice_amount", "notes"]) if invoice else {}
     if request.method == "POST":
-        form = InvoiceForm(request.POST, request.FILES, instance=invoice, user=request.user)
+        form = InvoiceForm(request.POST, request.FILES, instance=invoice, user=request.user, record_type=active_record_type)
         if form.is_valid():
             saved = form.save(commit=False)
             invoice_pages = form.cleaned_data.get("invoice_pages", [])
             if not saved.pk:
                 saved.user = request.user
+            saved.record_type = active_record_type
             if not saved.site_id:
-                saved.site = saved.supplier.site or user_site(request.user)
+                supplier_site = saved.supplier.site if saved.supplier_id else None
+                saved.site = supplier_site or user_site(request.user)
             if invoice_pages and not saved.pk:
                 saved.invoice_file = invoice_pages[0]
             saved.save()
@@ -233,13 +242,14 @@ def invoice_form(request, pk=None):
                 else:
                     replace_invoice_pages(saved, invoice_pages, request.user)
             update_invoice_attachments(request, saved)
-            write_audit_logs(request.user, saved, before, ["supplier", "invoice_date", "invoice_number", "entered_by", "invoice_amount", "notes"])
-            messages.success(request, "Invoice saved.")
+            write_audit_logs(request.user, saved, before, ["record_type", "supplier", "purchase_from", "invoice_date", "invoice_number", "entered_by", "invoice_amount", "notes"])
+            messages.success(request, "Cash purchase saved." if saved.is_cash_purchase else "Invoice saved.")
             return redirect(saved)
     else:
-        form = InvoiceForm(instance=invoice, user=request.user)
+        form = InvoiceForm(instance=invoice, user=request.user, record_type=active_record_type)
     attachments = invoice.attachments.all() if invoice else []
     invoice_page_count = (1 + len(attachments)) if invoice and invoice.invoice_file else 0
+    title = "Cash Purchase" if is_cash_purchase else "Invoice"
     return render(
         request,
         "gst_app/invoice_form.html",
@@ -248,7 +258,8 @@ def invoice_form(request, pk=None):
             "invoice": invoice,
             "attachments": attachments,
             "invoice_page_count": invoice_page_count,
-            "title": "Invoice",
+            "title": title,
+            "is_cash_purchase": is_cash_purchase,
             "cancel_url": cancel_url,
         },
     )
@@ -466,8 +477,8 @@ def endofday_archive(request, pk):
 @xframe_options_sameorigin
 def invoice_export(request, filetype):
     invoices = filter_invoices(request.user, request.GET)
-    rows = [[i.supplier.name, i.invoice_date, i.invoice_number, i.entered_by, money(i.invoice_amount or 0), i.created_at] for i in invoices]
-    headers = ["Supplier", "Invoice Date", "Invoice Number", "Entered By", "Amount", "Created"]
+    rows = [[i.get_record_type_display(), i.display_name, i.invoice_date, i.document_number, i.entered_by, money(i.invoice_amount or 0), i.created_at] for i in invoices]
+    headers = ["Type", "Supplier / Purchase", "Invoice Date", "Invoice Number", "Entered By", "Amount", "Created"]
     return export_rows(request, filetype, "invoice-report", headers, rows)
 
 
@@ -483,23 +494,6 @@ def endofday_export(request, filetype):
             r.entered_by,
             money(r.cash),
             money(r.vault_drop),
-            money(r.total_sales_with_payments),
-            money(r.total_fuel_sales),
-            r.fuel_dip_1_name or "-",
-            f"{r.fuel_dip_1_value:,.2f}",
-            r.fuel_dip_2_name or "-",
-            f"{r.fuel_dip_2_value:,.2f}",
-            r.fuel_dip_3_name or "-",
-            f"{r.fuel_dip_3_value:,.2f}",
-            r.fuel_dip_4_name or "-",
-            f"{r.fuel_dip_4_value:,.2f}",
-            r.fuel_dip_5_name or "-",
-            f"{r.fuel_dip_5_value:,.2f}",
-            r.fuel_dip_6_name or "-",
-            f"{r.fuel_dip_6_value:,.2f}",
-            money(r.gross_shop_sales),
-            money(r.total_value),
-            money(r.difference),
             money(r.net_shop_sales),
         ]
         for r in records
@@ -510,23 +504,6 @@ def endofday_export(request, filetype):
         "Entered By",
         "Cash",
         "Vault Drop / Cash Drop",
-        "Terminal Total",
-        "Total Fuel Sales",
-        "Fuel Tank 1",
-        "Tank 1 Dip Value",
-        "Fuel Tank 2",
-        "Tank 2 Dip Value",
-        "Fuel Tank 3",
-        "Tank 3 Dip Value",
-        "Fuel Tank 4",
-        "Tank 4 Dip Value",
-        "Fuel Tank 5",
-        "Tank 5 Dip Value",
-        "Fuel Tank 6",
-        "Tank 6 Dip Value",
-        "Gross Shop Sales",
-        "Total sales",
-        "Difference",
         "Net Shop Sales",
     ]
     return export_rows(request, filetype, "end-of-day-report", headers, rows)

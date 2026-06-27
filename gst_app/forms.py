@@ -115,6 +115,7 @@ class InvoiceForm(forms.ModelForm):
         model = Invoice
         fields = (
             "supplier",
+            "purchase_from",
             "invoice_date",
             "invoice_number",
             "invoice_pages",
@@ -127,15 +128,28 @@ class InvoiceForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
-    def __init__(self, *args, user=None, **kwargs):
+    def __init__(self, *args, user=None, record_type=None, **kwargs):
         self.user = user
+        instance = kwargs.get("instance")
+        self.record_type = record_type or (instance.record_type if instance else Invoice.RecordType.SUPPLIER_INVOICE)
         super().__init__(*args, **kwargs)
         today = timezone.localdate()
         self.fields["invoice_date"].initial = (self.instance.invoice_date if self.instance.pk else today).isoformat()
         self.fields["invoice_date"].widget.attrs.update({"min": today.isoformat(), "max": today.isoformat()})
         self.fields["invoice_pages"].required = not bool(self.instance.pk and self.instance.invoice_file)
+        self.fields["purchase_from"].label = "Purchase From"
+        self.fields["invoice_amount"].label = "Amount"
         if user is not None:
             self.fields["supplier"].queryset = suppliers_for_user(user)
+        if self.record_type == Invoice.RecordType.CASH_PURCHASE:
+            self.fields["supplier"].required = False
+            self.fields["purchase_from"].required = True
+            self.fields["invoice_number"].required = False
+            self.fields["invoice_number"].label = "Receipt / Invoice Number"
+        else:
+            self.fields["supplier"].required = True
+            self.fields["purchase_from"].required = False
+            self.fields["invoice_number"].required = True
 
     def clean(self):
         cleaned = super().clean()
@@ -145,13 +159,21 @@ class InvoiceForm(forms.ModelForm):
         if self.instance.pk and not self.instance.invoice_file and not invoice_pages:
             self.add_error("invoice_pages", "Upload at least one invoice page.")
         supplier = cleaned.get("supplier")
+        purchase_from = cleaned.get("purchase_from")
         invoice_number = cleaned.get("invoice_number")
-        if self.user and supplier and invoice_number:
+        if self.record_type == Invoice.RecordType.CASH_PURCHASE:
+            cleaned["supplier"] = None
+            if not purchase_from:
+                self.add_error("purchase_from", "Enter where this cash purchase was made.")
+        elif not supplier:
+            self.add_error("supplier", "Choose a supplier.")
+        if self.record_type != Invoice.RecordType.CASH_PURCHASE and self.user and supplier and invoice_number:
             qs = Invoice.objects.filter(
                 site=supplier.site,
                 supplier=supplier,
                 invoice_number__iexact=invoice_number.strip(),
             )
+            qs = qs.filter(record_type=Invoice.RecordType.SUPPLIER_INVOICE)
             if self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():

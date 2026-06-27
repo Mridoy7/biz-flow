@@ -49,9 +49,9 @@ class InvoiceAttachmentInline(admin.TabularInline):
 
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
-    list_display = ("invoice_number", "supplier", "site", "invoice_date", "invoice_amount", "user", "created_at")
-    search_fields = ("invoice_number", "supplier__name", "site__name", "entered_by")
-    list_filter = ("site", "invoice_date", "supplier")
+    list_display = ("record_type", "invoice_number", "supplier", "purchase_from", "site", "invoice_date", "invoice_amount", "user", "created_at")
+    search_fields = ("invoice_number", "supplier__name", "purchase_from", "site__name", "entered_by")
+    list_filter = ("record_type", "site", "invoice_date", "supplier")
     inlines = (InvoiceAttachmentInline,)
 
 
