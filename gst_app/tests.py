@@ -697,31 +697,35 @@ class PdfContentTests(TestCase):
         self.assertEqual(rows[0][0], "Date")
         self.assertNotEqual(rows[0], ("", ""))
 
-    def test_endofday_daysheet_only_includes_summary_rows(self):
+    def test_endofday_daysheet_includes_adjusted_united_and_shop_deductions(self):
         record = EndOfDay.objects.create(
             user=self.user,
             date=timezone.localdate(),
-            site_name="Holtze",
             entered_by="Ridoy",
             store_value_charge=12,
-            iou_payment=7,
-            drive_off_payment=3,
+            united_card=100,
+            iou=5,
+            drive_offs=2,
             cash=30,
             vault_drop=40,
             total_sales=100,
             total_fuel_sales=20,
-            ezy_pin=0,
-            less_surcharge=0,
+            ezy_pin=6,
+            less_surcharge=5,
         )
 
         rows = dict(endofday_daysheet_rows(record))
 
-        self.assertEqual(list(rows), ["Date", "Site Name", "Entered By", "Cash", "Vault Drop / Cash Drop", "Net Shop Sales"])
-        self.assertEqual(rows["Site Name"], "Holtze")
-        self.assertEqual(rows["Entered By"], "Ridoy")
+        self.assertIn("Uber Eats", rows)
+        self.assertIn("Door Dash", rows)
+        self.assertIn("Store Value Charge", rows)
+        self.assertIn("IOU Payment", rows)
         self.assertEqual(rows["Cash"], Decimal("30"))
         self.assertEqual(rows["Vault Drop / Cash Drop"], Decimal("40"))
-        self.assertNotIn("Store Value Charge", rows)
+        self.assertEqual(rows["United Card"], Decimal("105"))
+        self.assertEqual(rows["Gross Shop Sales"], Decimal("80"))
+        self.assertEqual(rows["Less Surcharge"], Decimal("5"))
+        self.assertEqual(rows["EZY Pin"], Decimal("6"))
         self.assertNotIn("Fuel Tank 1", rows)
 
     def test_endofday_fuel_dip_rows_are_separate_from_main_daysheet_rows(self):
@@ -778,6 +782,28 @@ class PdfContentTests(TestCase):
         self.assertContains(response, "Drive Off Payment")
         self.assertContains(response, "Total Fuel Sales")
 
+    def test_endofday_detail_includes_shop_deductions_after_gross_sales(self):
+        record = EndOfDay.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            entered_by="Ridoy",
+            total_sales=100,
+            total_fuel_sales=20,
+            ezy_pin=6,
+            less_surcharge=5,
+        )
+
+        response = self.client.get(f"/end-of-day/{record.pk}/")
+        body = response.content.decode()
+        table_body = body[body.index('<table class="table table-dayend align-middle">') : body.index("</table>")]
+
+        self.assertContains(response, "Gross Shop Sales")
+        self.assertContains(response, "Less Surcharge")
+        self.assertContains(response, "EZY Pin")
+        self.assertLess(table_body.index("Gross Shop Sales"), table_body.index("Less Surcharge"))
+        self.assertLess(table_body.index("Less Surcharge"), table_body.index("EZY Pin"))
+        self.assertLess(table_body.index("EZY Pin"), table_body.index("Net Shop Sales"))
+
     def test_endofday_detail_includes_fuel_dip_section(self):
         record = EndOfDay.objects.create(
             user=self.user,
@@ -817,13 +843,17 @@ class PdfContentTests(TestCase):
         self.assertIn("inline", preview_response["Content-Disposition"])
         self.assertIn("attachment", download_response["Content-Disposition"])
 
-    def test_endofday_pdf_uses_summary_only_and_uploaded_daysheet_pages(self):
+    def test_endofday_pdf_keeps_full_daysheet_and_uploaded_daysheet_pages(self):
         with tempfile.TemporaryDirectory() as temp_media, override_settings(MEDIA_ROOT=temp_media):
             record = EndOfDay.objects.create(
                 user=self.user,
                 date=timezone.localdate(),
                 site_name="Holtze",
                 entered_by="Ridoy",
+                united_card=100,
+                store_value_charge=12,
+                iou=5,
+                drive_offs=2,
                 fuel_dip_1_name="E85 tank 1",
                 fuel_dip_1_value=100,
                 fuel_dip_2_name="Unleaded 91 tank 1",
@@ -841,12 +871,13 @@ class PdfContentTests(TestCase):
         reader = PdfReader(BytesIO(response.content))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
 
-        self.assertEqual(len(reader.pages), 3)
-        self.assertIn("Site Name", text)
+        self.assertEqual(len(reader.pages), 4)
         self.assertIn("Holtze", text)
+        self.assertIn("United Card", text)
+        self.assertIn("$105.00", text)
         self.assertIn("Net Shop Sales", text)
-        self.assertNotIn("Fuel Dips", text)
-        self.assertNotIn("E85 tank 1", text)
+        self.assertIn("Fuel Dips", text)
+        self.assertIn("E85 tank 1", text)
         self.assertIn("Master Sheet", text)
         self.assertIn("End Of Days", text)
 
@@ -1075,7 +1106,7 @@ class EndOfDayReportExportTests(TestCase):
 
         response = self.client.get("/end-of-day/export/csv/")
 
-        self.assertContains(response, "Date,Site Name,Entered By,Cash,Vault Drop / Cash Drop,Net Shop Sales")
+        self.assertContains(response, "Date,Site Name,Entered By,Cash,Vault Drop / Cash Drop,United Card,Gross Shop Sales,Less Surcharge,EZY Pin,Net Shop Sales")
         self.assertNotContains(response, "Fuel Tank 1")
         self.assertNotContains(response, "E85 tank 1")
         self.assertNotContains(response, "Diesel tank 2")

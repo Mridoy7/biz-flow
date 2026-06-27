@@ -494,6 +494,10 @@ def endofday_export(request, filetype):
             r.entered_by,
             money(r.cash),
             money(r.vault_drop),
+            money(r.adjusted_united_card),
+            money(r.gross_shop_sales),
+            money(r.less_surcharge),
+            money(r.ezy_pin),
             money(r.net_shop_sales),
         ]
         for r in records
@@ -504,6 +508,10 @@ def endofday_export(request, filetype):
         "Entered By",
         "Cash",
         "Vault Drop / Cash Drop",
+        "United Card",
+        "Gross Shop Sales",
+        "Less Surcharge",
+        "EZY Pin",
         "Net Shop Sales",
     ]
     return export_rows(request, filetype, "end-of-day-report", headers, rows)

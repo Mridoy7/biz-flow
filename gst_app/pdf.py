@@ -10,7 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
 def money(value):
@@ -78,10 +78,29 @@ def invoice_pdf(invoice):
 def endofday_daysheet_rows(record):
     return [
         ("Date", record.date.strftime("%d/%m/%Y")),
-        ("Site Name", record.site_name or "-"),
-        ("Entered By", record.entered_by),
+        ("Uber Eats", record.uber_eats),
+        ("Door Dash", record.doordash),
+        ("Motorpass", record.motorpass),
+        ("Motorcharge", record.motorcharge),
+        ("Fleet", record.fleet_card),
+        ("Eftpos", record.eftpos),
+        ("Amex", record.amex_card),
+        ("Diners", record.diners_card),
+        ("United Card", record.adjusted_united_card),
+        ("Store Value Charge", record.store_value_charge),
+        ("IOU", record.iou),
+        ("Driveoffs", record.drive_offs),
+        ("IOU Payment", record.iou_payment),
+        ("Drive Off Payment", record.drive_off_payment),
         ("Cash", record.cash),
         ("Vault Drop / Cash Drop", record.vault_drop),
+        ("Total sales", record.total_value),
+        ("Terminal Total", record.total_sales_with_payments),
+        ("Difference", record.difference),
+        ("Total Fuel Sales", record.total_fuel_sales),
+        ("Gross Shop Sales", record.gross_shop_sales),
+        ("Less Surcharge", record.less_surcharge),
+        ("EZY Pin", record.ezy_pin),
         ("Net Shop Sales", record.net_shop_sales),
     ]
 
@@ -237,10 +256,22 @@ def endofday_pdf(record, as_attachment=False):
         Spacer(1, 10),
     ]
 
-    story.append(styled_daysheet_table(endofday_daysheet_rows(record), bold_labels=["Net Shop Sales"], red_labels=["Net Shop Sales"]))
+    summary_rows = ["Total sales", "Terminal Total", "Difference"]
+    shop_rows = ["Total Fuel Sales", "Gross Shop Sales", "Less Surcharge", "EZY Pin", "Net Shop Sales"]
+    story.append(styled_daysheet_table(endofday_daysheet_rows(record), bold_labels=summary_rows, pale_labels=shop_rows, red_labels=["Net Shop Sales"]))
 
     if record.note:
         story.extend([Spacer(1, 10), Paragraph(f"Note: {record.note}", styles["Normal"])])
+
+    story.extend(
+        [
+            PageBreak(),
+            Paragraph("Fuel Dips", styles["Title"]),
+            Paragraph(f"Date: {record.date:%d/%m/%Y}", styles["Normal"]),
+            Spacer(1, 10),
+            styled_daysheet_table(endofday_fuel_dip_rows(record), pale_labels=[label for label, value in endofday_fuel_dip_rows(record)]),
+        ]
+    )
 
     doc.build(story)
     pdf_bytes = merged_endofday_pdf_bytes(record, buffer.getvalue())

@@ -33,6 +33,8 @@
       <tr class="line-total line-total--sales"><td>Terminal Total</td><td class="text-end">{{ record.total_sales_with_payments|currency }}</td></tr>
       <tr class="line-total line-total--fuel"><td>Total Fuel Sales</td><td class="text-end">{{ record.total_fuel_sales|currency }}</td></tr>
       <tr class="line-total line-total--gross"><td>Gross Shop Sales</td><td class="text-end">{{ record.gross_shop_sales|currency }}</td></tr>
+      <tr class="line-total"><td>Less Surcharge</td><td class="text-end">{{ record.less_surcharge|currency }}</td></tr>
+      <tr class="line-total"><td>EZY Pin</td><td class="text-end">{{ record.ezy_pin|currency }}</td></tr>
       <tr class="line-total line-total--net"><td>Net Shop Sales</td><td class="text-end">{{ record.net_shop_sales|currency }}</td></tr>
     </tbody>
   </table>

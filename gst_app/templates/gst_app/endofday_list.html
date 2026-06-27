@@ -40,6 +40,10 @@
                 <th>Entered By</th>
                 <th class="text-end">Cash</th>
                 <th class="text-end">Vault Drop / Cash Drop</th>
+                <th class="text-end">United Card</th>
+                <th class="text-end">Gross Shop Sales</th>
+                <th class="text-end">Less Surcharge</th>
+                <th class="text-end">EZY Pin</th>
                 <th class="text-end">Net Shop Sales</th>
               </tr>
             </thead>
@@ -51,10 +55,14 @@
                   <td>{{ record.entered_by }}</td>
                   <td class="text-end">{{ record.cash|currency }}</td>
                   <td class="text-end">{{ record.vault_drop|currency }}</td>
+                  <td class="text-end">{{ record.adjusted_united_card|currency }}</td>
+                  <td class="text-end">{{ record.gross_shop_sales|currency }}</td>
+                  <td class="text-end">{{ record.less_surcharge|currency }}</td>
+                  <td class="text-end">{{ record.ezy_pin|currency }}</td>
                   <td class="text-end">{{ record.net_shop_sales|currency }}</td>
                 </tr>
               {% empty %}
-                <tr><td colspan="6">No End of Day records found.</td></tr>
+                <tr><td colspan="10">No End of Day records found.</td></tr>
               {% endfor %}
             </tbody>
           </table>
